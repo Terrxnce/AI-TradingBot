@@ -1,0 +1,92 @@
+✅ AI Trading Bot Setup Summary (As of June 2, 2025)
+📁 Project Directory
+makefile
+Copy
+Edit
+C:\Users\Index\AI_TradingBot
+🧱 Environment & Tools
+Python virtual environment: tradingbot_env
+
+Editor: Visual Studio Code (VS Code) with Python interpreter set
+
+Broker: MetaTrader 5 (MT5)
+
+News Source: NewsAPI
+
+AI Reasoning: Local LLaMA 3 via Ollama (no OpenAI dependency)
+
+🧪 Verified Working Components
+Component	Status	Notes
+✅ Python venv	Active	Clean, isolated environment
+✅ MT5 Integration	Working	Candle data fetch confirmed
+✅ NewsAPI	Working	Live headlines retrieved
+✅ LLaMA 3 (Ollama)	Working	Local AI model, no cost
+✅ Technical Engine	Working	FVG, OB, BOS, EMA logic tested
+✅ Strategy Output	✅ Visible	Live data returns correct signals
+
+🔧 Files and What They Do
+File	Purpose
+test_setup.py	Verifies MT5, NewsAPI, and LLaMA connectivity
+get_candles.py	Fetches live candlestick data from MT5
+strategy_engine.py	Detects FVGs, Order Blocks, Break of Structure
+run_strategy_test.py	Runs full TA pipeline with live data
+
+🧠 Local AI Integration
+Model: llama3 running via Ollama on http://localhost:11434
+
+Method: Used requests.post to send prompts and receive economic reasoning
+
+Status: GPT-4 fully replaced — no OpenAI costs or limits
+
+📌 Next Steps
+1. 🧠 decision_engine.py
+Merge outputs from:
+
+strategy_engine.py (TA signals)
+
+llama3 local model (news sentiment or directional bias)
+
+Decide: BUY / SELL / HOLD
+
+2. 💼 broker_interface.py
+Use MetaTrader5.order_send() to:
+
+Place live orders with SL/TP
+
+Manage risk and position sizing
+
+Check existing positions
+
+3. ⏱️ bot_runner.py
+Build main event loop:
+
+Run every X minutes or on each candle close
+
+Fetch → analyze → decide → trade
+
+4. 📘 journal_logger.py (Optional)
+Log each trade with:
+
+Entry/exit prices
+
+Reason for entry (FVG + BOS + LLaMA)
+
+Outcome and metrics
+
+5. 📊 Visual Plotting (Optional)
+Use Plotly or Matplotlib to visualize:
+
+FVG zones
+
+OB regions
+
+BOS arrows
+
+🛠 Suggestion for Next Phase
+Let’s build the following in order:
+
+✅ decision_engine.py (TA + AI = signal)
+
+✅ broker_interface.py (executes trade)
+
+✅ bot_runner.py (automation loop)
