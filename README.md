@@ -36,7 +36,7 @@ python test_setup.py
 | `strategy_engine.py`      | Applies technical strategy logic (FVG, OB, BOS, EMA) |
 | `run_strategy_test.py`    | End-to-end test of the technical signal pipeline     |
 | `setup_summary.md`        | Log of verified system components and environment    |
-| `docs/Project_Outline.md` | High-level architecture and roadmap                  |
+| `AI Trading Bot Progress summary.txt` | Summarizes current setup, tools, and next steps for the AI trading bot project               |
 
 ## 📅 Project Status
 
