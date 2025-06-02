@@ -1,0 +1,13 @@
+# Ignore virtual environment
+tradingbot_env/
+
+# Ignore Python junk
+__pycache__/
+*.pyc
+
+# Ignore IDE/workspace files
+.vscode/
+.idea/
+
+# Ignore sensitive config
+.env
