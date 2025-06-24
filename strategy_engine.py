@@ -12,7 +12,6 @@ class TechnicalAnalyzer:
         fvg_signals = []
         for i in range(2, len(self.df)):
             c0 = self.df.iloc[i - 2]
-            c1 = self.df.iloc[i - 1]
             c2 = self.df.iloc[i]
 
             if c0['low'] > c2['high']:
@@ -50,3 +49,18 @@ class TechnicalAnalyzer:
             "bos": self.detect_bos(),
             "df": self.df
         }
+
+
+def analyze_structure(candles_df):
+    ta = TechnicalAnalyzer(candles_df)
+    result = ta.run_all()
+
+    latest_bos = result["bos"][-1][1] if result["bos"] else None
+    trend = "bullish" if result["df"].iloc[-1]['EMA_21'] > result["df"].iloc[-1]['EMA_50'] else "bearish"
+
+    return {
+        "bos": True if latest_bos == trend else False,
+        "fvg_valid": len(result["fvg"]) > 0,
+        "ob_tap": len(result["order_blocks"]) > 0,
+        "ema_trend": trend
+    }
