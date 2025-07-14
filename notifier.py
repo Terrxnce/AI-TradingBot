@@ -5,7 +5,6 @@ BOT_TOKEN = '7487030977:AAEfZkgC1VGoSop_isf140bGFNkabIQS8jg'
 CHAT_ID = -1002538880757  # Your group chat ID
 
 def send_trade_notification(symbol, direction, entry, sl, tp, lot, tech_score, ema_trend, ai_confidence, ai_reasoning, risk_note):
-    return
     msg = f"""
 📢 *NEW TRADE SIGNAL*
 
