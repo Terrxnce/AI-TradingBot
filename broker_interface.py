@@ -1,28 +1,6 @@
-# ------------------------------------------------------------------------------------
-# 🏦 broker_interface.py – MT5 Trading Interface
-#
-# This module handles all broker-level interactions:
-#   - Initialization and shutdown of MetaTrader 5
-#   - Resolving symbols (auto-detects suffixes like ".r" or ".pro")
-#   - Executing trades with optional dynamic or static SL/TP
-#
-# ⚙️ Fallback SL/TP levels are loaded from config (sl_pips / tp_pips)
-# 🛑 Safety features include stop level + freeze level handling
-#
-# ✅ initialize_mt5() – Connects to MT5 terminal
-# ✅ shutdown_mt5() – Gracefully closes the session
-# ✅ resolve_symbol() – Detects exact symbol name (e.g., "US30.r", "NAS100.pro")
-# ✅ place_trade() – Sends trade request with SL/TP + logging
-#
-# Used by: bot_runner.py for executing BUY/SELL orders
-#
-# Author: Terrence Ndifor (Terry)
-# Project: Smart Multi-Timeframe Trading Bot
-# ------------------------------------------------------------------------------------
-
-
 import MetaTrader5 as mt5
 from config import CONFIG  # Load SL/TP from config
+from notifier import send_trade_notification
 
 # === MT5 Setup ===
 def initialize_mt5():
@@ -36,42 +14,43 @@ def shutdown_mt5():
 
 # === Symbol Resolution ===
 def resolve_symbol(base_symbol):
-    if not mt5.initialize():
-        raise RuntimeError(f"❌ MT5 not initialized: {mt5.last_error()}")
-
-    all_symbols = mt5.symbols_get()
+    all_symbols = mt5.symbols_get() 
     if all_symbols is None:
         raise RuntimeError("❌ Failed to fetch symbols from broker.")
-
     for sym in all_symbols:
         if sym.name.upper().startswith(base_symbol.upper()):
             return sym.name
-
     return base_symbol  # fallback
 
 # === Trade Execution with optional SL/TP ===
-def place_trade(symbol, action, lot=0.1, sl=None, tp=None):
+def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_trend=None, ai_confidence=None, ai_reasoning=None, risk_note=None):
     if not mt5.initialize():
         raise RuntimeError(f"❌ MT5 not initialized: {mt5.last_error()}")
 
-    resolved_symbol = symbol.upper()
-    symbol_info = mt5.symbol_info(resolved_symbol)
+    resolved_symbol = resolve_symbol(symbol)
+    print(f"🔍 Using resolved symbol: {resolved_symbol}")
 
+    symbol_info = mt5.symbol_info(resolved_symbol)
     if symbol_info is None:
-        raise ValueError(f"❌ Symbol {resolved_symbol} not found.")
+        print(f"❌ Symbol {resolved_symbol} not found.")
+        return False
 
     if not symbol_info.visible:
         print(f"📂 Enabling {resolved_symbol} in Market Watch...")
         if not mt5.symbol_select(resolved_symbol, True):
-            raise RuntimeError(f"❌ Failed to enable {resolved_symbol} in Market Watch.")
+            print(f"❌ Failed to enable {resolved_symbol} in Market Watch.")
+            return False
+
+    tick = mt5.symbol_info_tick(resolved_symbol)
+    if tick is None or tick.bid == 0.0:
+        print(f"❌ Failed to get tick data for {resolved_symbol}. Is the market open?")
+        return False
+    else:
+        print(f"📈 {resolved_symbol}: trading context is now fully active.")
 
     if symbol_info.trade_mode != mt5.SYMBOL_TRADE_MODE_FULL:
         print(f"⚠️ Market is closed for {resolved_symbol}. Skipping trade.")
-        return
-
-    tick = mt5.symbol_info_tick(resolved_symbol)
-    if tick is None:
-        raise RuntimeError(f"❌ Failed to get tick data for {resolved_symbol}.")
+        return False
 
     price = tick.ask if action == "BUY" else tick.bid
     point = symbol_info.point
@@ -79,7 +58,7 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None):
     deviation = 10
     order_type = mt5.ORDER_TYPE_BUY if action == "BUY" else mt5.ORDER_TYPE_SELL
 
-    # If no SL/TP passed in, fallback to config-based
+    # === SL/TP Logic ===
     if sl is None or tp is None:
         sl_pips = CONFIG.get("sl_pips", 50)
         tp_pips = CONFIG.get("tp_pips", 100)
@@ -112,10 +91,36 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None):
     }
 
     result = mt5.order_send(request)
+
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         if result.retcode == 10018:
             print(f"⚠️ Market closed for {resolved_symbol}. Skipping trade.")
         else:
             print(f"❌ Trade failed: {result.retcode} - {result.comment}")
+        return False
     else:
         print(f"✅ Trade executed: {action} {resolved_symbol} @ {price:.{digits}f}")
+        
+        # === Send Telegram Signal ===
+        try:
+            send_trade_notification(
+                symbol=resolved_symbol,
+                direction=action,
+                entry=round(price, digits),
+                sl=round(sl, digits),
+                tp=round(tp, digits),
+                lot=lot,
+                tech_score=tech_score,
+                ema_trend=ema_trend,
+                ai_confidence=ai_confidence,
+                ai_reasoning=ai_reasoning,
+                risk_note=risk_note or "No risk note provided"
+            )
+
+            print("📤 Signal sent to Telegram.")
+        except Exception as e:
+            print(f"⚠️ Failed to send Telegram signal: {e}")
+
+        return True
+
+

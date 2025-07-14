@@ -25,14 +25,76 @@ from config import CONFIG  # Optional config import
 from ta.volatility import average_true_range
 import pandas as pd
 import re
+from datetime import datetime
 
-def evaluate_trade_decision(ta_signals, ai_sentiment):
+
+def build_ai_prompt(ta_signals: dict, macro_sentiment: str = "", session_info: str = ""):
+    return f"""
+You are an intraday forex trader using order blocks (OB), fair value gaps (FVG), break of structure (BOS), and EMA trends to trade indices and currencies.
+
+Here’s the current market state:
+- EMA Trend: {ta_signals.get('ema_trend')}
+- Structure: {ta_signals.get('bos')}
+- OB Tap: {ta_signals.get('ob_tap')}
+- FVG Valid: {ta_signals.get('fvg_valid')}
+- Rejection: {ta_signals.get('rejection')}
+- False Break: {ta_signals.get('false_break')}
+- Engulfing Pattern: {ta_signals.get('engulfing')}
+- Session: {session_info}
+- Macro Sentiment: {macro_sentiment}
+
+Based on the above, do we enter a trade?
+
+Reply ONLY in this format:
+ENTRY_DECISION: BUY / SELL / HOLD  
+CONFIDENCE: 0–10  
+REASONING: [short reasoning]  
+RISK_NOTE: [if any]
+"""
+def parse_ai_response(response: str):
+    try:
+        lines = response.strip().split("\n")
+        parsed = {}
+
+        for line in lines:
+            if "ENTRY_DECISION:" in line:
+                decision = line.split("ENTRY_DECISION:")[1].strip().upper()
+                if decision in ["BUY", "SELL", "HOLD"]:
+                    parsed['decision'] = decision
+                else:
+                    parsed['decision'] = "HOLD"  # fallback
+            elif "CONFIDENCE:" in line:
+                try:
+                    parsed['confidence'] = float(line.split("CONFIDENCE:")[1].strip())
+                except ValueError:
+                    parsed['confidence'] = 0  # fallback if N/A
+            elif "REASONING:" in line:
+                parsed['reasoning'] = line.split("REASONING:")[1].strip()
+            elif "RISK_NOTE:" in line:
+                parsed['risk_note'] = line.split("RISK_NOTE:")[1].strip()
+
+        return parsed if 'decision' in parsed else None
+
+    except Exception as e:
+        print("⚠️ Failed to parse AI response:", e)
+        return None
+
+
+
+def evaluate_trade_decision(ta_signals, ai_response_raw):
     """
-    Technicals make the decision, AI confirms or blocks it —
-    unless technicals are very strong (score 5+), then override AI.
+    Technicals decide direction. AI must confirm unless technical score is very strong.
+    AI response must be in structured format: ENTRY_DECISION, CONFIDENCE, etc.
     """
     required_score = CONFIG.get("min_score_for_trade", 3)
     technical_score = 0
+
+    # Enforce H1/M15 trend agreement
+    #h1 = ta_signals.get("h1_trend")
+    #m15 = ta_signals.get("ema_trend")
+    #if h1 and m15 and h1 != m15:
+     #   print(f"🔁 Skipping: H1 ({h1}) and M15 ({m15}) trend mismatch.")
+      #  return "HOLD"
 
     if ta_signals.get("bos") in ["bullish", "bearish"]:
         technical_score += 1
@@ -48,44 +110,97 @@ def evaluate_trade_decision(ta_signals, ai_sentiment):
         technical_score += 1
 
     trend = ta_signals.get("ema_trend", "")
-
-    # === Parse AI ===
-    ai_sentiment = ai_sentiment.lower()
-    sentiment_match = re.search(r"sentiment\s*[:\-]?\s*(bullish|bearish|neutral)", ai_sentiment)
-    confidence_match = re.search(r"confidence\s*[:\-]?\s*(high|medium|low)", ai_sentiment)
-
-    sentiment = sentiment_match.group(1) if sentiment_match else "neutral"
-    confidence = confidence_match.group(1) if confidence_match else "low"
+    direction = "BUY" if trend == "bullish" else "SELL" if trend == "bearish" else None
 
     print("📊 Technical Score:", technical_score)
     print("📉 EMA Trend:", trend)
-    print(f"🧠 Sentiment: {sentiment} | Confidence: {confidence}")
 
-    # === 1. Override AI if technicals are very strong (5 or 6)
-    if technical_score >= 5 and trend in ["bullish", "bearish"]:
-        print("⚡ Strong technicals override AI. Executing trade based on trend only.")
-        return "BUY" if trend == "bullish" else "SELL"
+    # === Override AI if technicals are very strong
+    if technical_score >= 5 and direction:
+        print("⚡ Strong technicals override AI.")
+        return direction
 
-    # === 2. Use AI + TA logic
-    direction = None
-    if technical_score >= required_score:
-        if trend == "bullish":
-            direction = "BUY"
-        elif trend == "bearish":
-            direction = "SELL"
+    # === Parse structured AI response
+    parsed = parse_ai_response(ai_response_raw)
+    if parsed:
+        print(f"🧠 AI Decision: {parsed['decision']} | Confidence: {parsed['confidence']} | Reason: {parsed['reasoning']}")
+        if parsed['decision'] == direction and parsed['confidence'] >= 7:
+            return parsed['decision']
+        else:
+            print("⚠️ AI confidence too low or direction mismatch")
+            return "HOLD"
+    else:
+        print("❌ Could not parse AI. Defaulting to HOLD.")
+        return "HOLD"
 
-    if direction == "BUY" and sentiment == "bullish" and confidence in ["medium", "high"]:
-        return "BUY"
-    elif direction == "SELL" and sentiment == "bearish" and confidence in ["medium", "high"]:
-        return "SELL"
+def build_soft_limit_override_prompt(ta_signals: dict, ai_decision: str, confidence: float, daily_loss: float):
+    return f"""
+You are a trading risk manager monitoring an AI forex trading bot named D.E.V.I. The bot has lost ${abs(daily_loss):,.2f} today, which is more than 50% of its allowed daily risk limit.
 
-    return "HOLD"
+Here is the current technical setup:
+- EMA Trend: {ta_signals.get('ema_trend')}
+- Structure (BOS): {ta_signals.get('bos')}
+- OB Tap: {ta_signals.get('ob_tap')}
+- FVG Valid: {ta_signals.get('fvg_valid')}
+- Rejection: {ta_signals.get('rejection')}
+- False Break: {ta_signals.get('false_break')}
+- Engulfing Pattern: {ta_signals.get('engulfing')}
+- Session: {ta_signals.get('session')}
+- AI Decision: {ai_decision} with confidence {confidence}/10
+
+Given this setup and drawdown, is it justified to take this next trade? Respond ONLY with:
+
+OVERRIDE_DECISION: YES or NO  
+REASON: [short explanation]
+"""
+
+def parse_override_response(response: str):
+    try:
+        decision_match = re.search(r'OVERRIDE_DECISION:\s*(YES|NO)', response.upper())
+        reason_match = re.search(r'REASON:\s*(.+)', response, re.IGNORECASE)
+        if decision_match:
+            return {
+                "override": decision_match.group(1).strip().upper(),
+                "reason": reason_match.group(1).strip() if reason_match else "No reason provided."
+            }
+        return None
+    except Exception as e:
+        print("⚠️ Failed to parse override response:", e)
+        return None
+
+def should_override_soft_limit(ta_signals, ai_response_raw, daily_loss, call_ai_func):
+    """
+    If soft limit is breached, send override prompt to AI using the last decision.
+    Only trade if AI says: OVERRIDE_DECISION: YES
+    """
+    parsed = parse_ai_response(ai_response_raw)
+    if not parsed:
+        return False  # default to conservative if AI couldn't be parsed
+
+    prompt = build_soft_limit_override_prompt(
+        ta_signals=ta_signals,
+        ai_decision=parsed.get("decision"),
+        confidence=parsed.get("confidence"),
+        daily_loss=daily_loss
+    )
+    print("📤 Sending soft-limit override prompt to AI...")
+    override_response = call_ai_func(prompt)
+
+    parsed_override = parse_override_response(override_response)
+    if parsed_override:
+        print(f"🤖 Override Decision: {parsed_override['override']} | Reason: {parsed_override['reason']}")
+        return parsed_override["override"] == "YES"
+    
+    print("❌ Could not parse override response. Blocking trade.")
+    return False
+
 
 
 def calculate_dynamic_sl_tp(price, direction, candles_df, rrr=2.0, window=14, buffer_multiplier=0.5):
     """
     Calculates SL and TP dynamically based on ATR and recent price structure.
-    Returns: (sl_price, tp_price)
+    TP = price ± (price - SL) * RRR
+    SL = recent swing high/low ± buffer
     """
     if len(candles_df) < window + 1:
         raise ValueError("Not enough candle data to calculate ATR.")
@@ -96,23 +211,20 @@ def calculate_dynamic_sl_tp(price, direction, candles_df, rrr=2.0, window=14, bu
         close=candles_df['close'],
         window=window
     )
-
     atr = atr_series.iloc[-1]
     buffer = atr * buffer_multiplier
 
-    recent_lows = candles_df['low'].tail(10)
-    recent_highs = candles_df['high'].tail(10)
-
     if direction == "BUY":
-        sl = recent_lows.min() - buffer
+        sl = candles_df['low'].tail(10).min() - buffer
         tp = price + (price - sl) * rrr
     elif direction == "SELL":
-        sl = recent_highs.max() + buffer
+        sl = candles_df['high'].tail(10).max() + buffer
         tp = price - (sl - price) * rrr
     else:
         raise ValueError("Invalid direction: must be 'BUY' or 'SELL'.")
 
     return round(sl, 5), round(tp, 5)
+
 
 
 # === Test block ===

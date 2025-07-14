@@ -17,12 +17,30 @@
 # Project: Smart Multi-Timeframe Trading Bot
 # ------------------------------------------------------------------------------------
 
+
+FTMO_PARAMS = {
+    "initial_balance": 200_000,  # Replace with actual
+    "max_daily_loss_pct": 0.05,
+    "max_total_loss_pct": 0.10,
+    "profit_target_pct": 0.10,
+    "min_trading_days": 4
+}
+
+
 CONFIG = {
-    "min_score_for_trade": 2,
+    "min_score_for_trade": 4,
     "sl_pips": 50,
+    "delay_seconds": 60 * 15,  # 15 minutes
     "tp_pips": 100,
-    "lot_size": 0.1,
-    "use_engulfing": False,
+    "lot_size": 0.5,
+    "LOT_SIZES": {
+        "XAUUSD": 1.0,
+        "US500.cash": 87.5,
+        "EURUSD": 0.5,
+        "GBPUSD": 0.5,
+        "GER40.cash": 50,
+    },
+    "use_engulfing": True,
     "use_bos": True,
     "use_liquidity_sweep": True,
     "ema_trend_threshold": {
@@ -33,4 +51,7 @@ CONFIG = {
     }
 
 }
+
+DEFAULT_SYMBOLS = ["US500.cash", "XAUUSD", "EURUSD"]
+
 # Add any other configuration options you need here

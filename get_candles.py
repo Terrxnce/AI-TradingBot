@@ -34,6 +34,14 @@ def get_latest_candle_data(symbol, timeframe, bars=200):
     """
     return fetch_mt5_data(symbol=symbol, timeframe=timeframe, bars=bars)
 
+def get_multi_tf_data(symbol, timeframes=[mt5.TIMEFRAME_M15, mt5.TIMEFRAME_H1]):
+    data = {}
+    for tf in timeframes:
+        df = fetch_mt5_data(symbol, tf, bars=200)
+        data[tf] = df
+    return data
+
+
 # === Test Mode ===
 if __name__ == "__main__":
     df = get_latest_candle_data("EURUSD", mt5.TIMEFRAME_M15)
