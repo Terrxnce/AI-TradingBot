@@ -1,5 +1,5 @@
 import MetaTrader5 as mt5
-from datetime import datetime, timedelta
+from datetime import datetime
 from decision_engine import should_override_soft_limit
 from config import FTMO_PARAMS
 
@@ -24,16 +24,15 @@ def get_equity():
     acc_info = mt5.account_info()
     if acc_info is None or acc_info.equity == 0:
         print("⚠️ Invalid or unavailable equity info.")
-        return FTMO_PARAMS["initial_balance"]  # fallback
+        return FTMO_PARAMS["initial_balance"]
     return acc_info.equity
 
 def get_balance():
     acc_info = mt5.account_info()
     if acc_info is None or acc_info.balance == 0:
         print("⚠️ Invalid or unavailable balance info.")
-        return FTMO_PARAMS["initial_balance"]  # fallback
+        return FTMO_PARAMS["initial_balance"]
     return acc_info.balance
-
 
 def is_within_daily_loss():
     closed_today = get_closed_pnl_today()
@@ -66,7 +65,7 @@ def is_trading_day_requirement_met():
 def can_trade(ta_signals=None, ai_response_raw=None, call_ai_func=None):
     max_daily_loss = FTMO_PARAMS["max_daily_loss_pct"] * FTMO_PARAMS["initial_balance"]
     max_total_loss = FTMO_PARAMS["max_total_loss_pct"] * FTMO_PARAMS["initial_balance"]
-    personal_limit = 0.5 * max_daily_loss  # $5,000 on 200k
+    personal_limit = 0.5 * max_daily_loss
 
     closed_today = get_closed_pnl_today()
     floating = get_floating_pnl()
@@ -79,27 +78,39 @@ def can_trade(ta_signals=None, ai_response_raw=None, call_ai_func=None):
     print(f"🔒 [RISK CHECK] Closed PnL: {closed_today:.2f} | Floating: {floating:.2f} | Daily Loss: {daily_loss:.2f}")
     print(f"🔒 [RISK CHECK] Equity: {equity:.2f} | Total Loss: {total_loss:.2f} | Balance: {balance:.2f}")
 
-    # ✅ HARD STOP – FTMO daily
     if daily_loss <= -max_daily_loss:
         print("🚫 Blocked: Daily loss limit breached.")
         return False
 
-    # ✅ HARD STOP – FTMO total
     if total_loss >= max_total_loss:
         print("🚫 Blocked: Total loss limit breached.")
         return False
 
-    # ✅ PROFIT TARGET HIT
     if balance >= FTMO_PARAMS["initial_balance"] * (1 + FTMO_PARAMS["profit_target_pct"]):
         print("✅ Profit target hit. No further trades needed.")
         return False
 
-    # ✅ PERSONAL LIMIT HIT – TEMPORARY BYPASS
     if daily_loss <= -personal_limit:
         print("⛔ Personal soft limit breached.")
         print(f"📉 Today's P&L: ${daily_loss:,.2f}")
         print(f"💣 Remaining buffer today: ${max_daily_loss + daily_loss:,.2f}")
-        print("⚠️ OVERRIDE CHECK TEMP DISABLED — TRADE WILL CONTINUE")
-        return True
+
+        if call_ai_func and ta_signals and ai_response_raw and "ENTRY_DECISION" in ai_response_raw:
+            print("🧠 Checking AI override...")
+            should_override = should_override_soft_limit(
+                ta_signals=ta_signals,
+                ai_response_raw=ai_response_raw,
+                daily_loss=daily_loss,
+                call_ai_func=call_ai_func
+            )
+            if should_override:
+                print("✅ AI override approved. Continuing trade.")
+                return True
+            else:
+                print("🚫 AI override denied. Blocking trade.")
+                return False
+        else:
+            print("⚠️ Missing AI input — skipping override. Blocking trade.")
+            return False
 
     return True

@@ -27,6 +27,8 @@ import pandas as pd
 import MetaTrader5 as mt5
 from datetime import datetime
 from config import CONFIG
+from session_utils import detect_session
+
 
 class TechnicalAnalyzer:
     def __init__(self, df):
@@ -75,18 +77,26 @@ class TechnicalAnalyzer:
 
         return engulfings
 
-
-    def detect_bos(self, swing_lookback=3):
+    def detect_bos(self, swing_lookback=5):
         bos = []
+
         for i in range(swing_lookback * 2, len(self.df)):
-            prev = self.df.iloc[i - swing_lookback * 2:i]
-            swing_high = prev['high'][swing_lookback:-swing_lookback].max()
-            swing_low = prev['low'][swing_lookback:-swing_lookback].min()
-            if self.df.iloc[i]['close'] > swing_high:
-                bos.append((i, 'bullish', swing_high))
-            if self.df.iloc[i]['close'] < swing_low:
-                bos.append((i, 'bearish', swing_low))
+             prev_candles = self.df.iloc[i - swing_lookback * 2:i]
+
+             # Detect recent swing levels
+             swing_high = prev_candles['high'].rolling(window=swing_lookback).max().iloc[-1]
+             swing_low = prev_candles['low'].rolling(window=swing_lookback).min().iloc[-1]
+
+        current_close = self.df.iloc[i]['close']
+
+        # Confirmed BOS based on close
+        if current_close > swing_high:
+            bos.append((i, 'bullish', swing_high))
+        elif current_close < swing_low:
+            bos.append((i, 'bearish', swing_low))
+
         return bos
+
 
     def detect_false_breaks(self, swing_lookback=5):
         sweeps = []
@@ -149,15 +159,6 @@ def detect_ema_trend(row, min_separation=0):
         return "bearish"
     return "neutral"
 
-def detect_session():
-    hour = datetime.now().hour
-    if 0 <= hour < 7:
-        return "Asia"
-    elif 7 <= hour < 13:
-        return "London"
-    else:
-        return "New York"
-
 def analyze_structure(candles_df, candles_df_h1=None, timeframe=mt5.TIMEFRAME_M15):
     ta = TechnicalAnalyzer(candles_df)
     result = ta.run_all()
@@ -182,6 +183,8 @@ def analyze_structure(candles_df, candles_df_h1=None, timeframe=mt5.TIMEFRAME_M1
     print("📊 Final EMA trend classification:", trend)
     print("🔍 Latest BOS:", latest_bos)
     print("🕐 Current Session:", detect_session())
+    print("✅ analyze_structure() completed for", candles_df.iloc[-1]["time"])
+
     if h1_trend:
         print("🧭 H1 Trend Confirmation:", h1_trend)
 
@@ -194,5 +197,6 @@ def analyze_structure(candles_df, candles_df_h1=None, timeframe=mt5.TIMEFRAME_M1
         "engulfing": any(e[1] == trend for e in result["engulfings"]),
         "ema_trend": trend,
         "h1_trend": h1_trend,
-        "session": detect_session()
+     "session": "London"  # ← Hardcoded for now
+
     }

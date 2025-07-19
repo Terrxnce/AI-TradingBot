@@ -19,7 +19,7 @@
 
 
 FTMO_PARAMS = {
-    "initial_balance": 200_000,  # Replace with actual
+    "initial_balance": 10_000,  # Replace with actual
     "max_daily_loss_pct": 0.05,
     "max_total_loss_pct": 0.10,
     "profit_target_pct": 0.10,
@@ -27,18 +27,20 @@ FTMO_PARAMS = {
 }
 
 
+
 CONFIG = {
-    "min_score_for_trade": 4,
+
+    "min_score_for_trade": 4.5,
     "sl_pips": 50,
     "delay_seconds": 60 * 15,  # 15 minutes
     "tp_pips": 100,
-    "lot_size": 0.5,
+    "lot_size": 0.25,
     "LOT_SIZES": {
-        "XAUUSD": 1.0,
-        "US500.cash": 87.5,
-        "EURUSD": 0.5,
-        "GBPUSD": 0.5,
-        "GER40.cash": 50,
+        "XAUUSD": 0.5,
+        "US500.cash": 3.5,
+        "EURUSD": 0.25,
+        "GBPUSD": 0.25,
+        "GER40.cash": 1.5,
     },
     "use_engulfing": True,
     "use_bos": True,
@@ -48,10 +50,20 @@ CONFIG = {
         "H1": 0.0005,
         "H4": 0.001,
         "D1": 0.002
-    }
+    },
 
+    "partial_close_trigger_percent": 1.0,  # 1% of balance
+
+    "session_hours": {
+    "Asia": [1,7],
+    "London": [8,12],
+    "New York Pre-Market": [13.5, 14],
+    "New York": [14, 20],
+    "Post-Market": [20, 24]
+}
 }
 
-DEFAULT_SYMBOLS = ["US500.cash", "XAUUSD", "EURUSD"]
+
+
 
 # Add any other configuration options you need here

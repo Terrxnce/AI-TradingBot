@@ -27,57 +27,78 @@ import pandas as pd
 import re
 from datetime import datetime
 
-
 def build_ai_prompt(ta_signals: dict, macro_sentiment: str = "", session_info: str = ""):
     return f"""
-You are an intraday forex trader using order blocks (OB), fair value gaps (FVG), break of structure (BOS), and EMA trends to trade indices and currencies.
+You are D.E.V.I, a structure-based AI trading assistant. You specialize in high-probability intraday trades on forex and indices, using technical confluence and market timing. You do not guess — if the setup isn't clear, you HOLD.
 
-Here’s the current market state:
+Your logic stack includes:
+- OB/FVG structure alignment
+- Trend confirmation via EMA (21, 50, 200)
+- Rejection zones and liquidity sweeps
+- Session context (Asia/London/NY)
+- Optional macro sentiment (if provided)
+
+Here is the current signal context:
+
+[TECHNICAL STRUCTURE]
 - EMA Trend: {ta_signals.get('ema_trend')}
-- Structure: {ta_signals.get('bos')}
+- BOS: {ta_signals.get('bos')}
 - OB Tap: {ta_signals.get('ob_tap')}
 - FVG Valid: {ta_signals.get('fvg_valid')}
 - Rejection: {ta_signals.get('rejection')}
 - False Break: {ta_signals.get('false_break')}
-- Engulfing Pattern: {ta_signals.get('engulfing')}
-- Session: {session_info}
-- Macro Sentiment: {macro_sentiment}
+- Engulfing: {ta_signals.get('engulfing')}
 
-Based on the above, do we enter a trade?
+[SESSION CONTEXT]
+- Current Session: {session_info}
 
-Reply ONLY in this format:
+[MACRO CONTEXT]
+- Sentiment: {macro_sentiment}
+
+Based on this full confluence, decide whether to enter a trade. Only respond in the following format:
+
 ENTRY_DECISION: BUY / SELL / HOLD  
-CONFIDENCE: 0–10  
-REASONING: [short reasoning]  
-RISK_NOTE: [if any]
+CONFIDENCE: [0–10]  
+REASONING: [Summarize the logic]  
+RISK_NOTE: [Comment on timing, structure quality, or hesitation factors]
 """
+
 def parse_ai_response(response: str):
     try:
+        parsed = {
+            'decision': 'HOLD',         # safe fallback
+            'confidence': 0,
+            'reasoning': 'No reasoning provided.',
+            'risk_note': 'No risk note provided.'
+        }
+
         lines = response.strip().split("\n")
-        parsed = {}
-
         for line in lines:
-            if "ENTRY_DECISION:" in line:
-                decision = line.split("ENTRY_DECISION:")[1].strip().upper()
-                if decision in ["BUY", "SELL", "HOLD"]:
-                    parsed['decision'] = decision
-                else:
-                    parsed['decision'] = "HOLD"  # fallback
-            elif "CONFIDENCE:" in line:
+            if "ENTRY_DECISION:" in line.upper():
+                val = line.split("ENTRY_DECISION:")[-1].strip().upper()
+                if val in ["BUY", "SELL", "HOLD"]:
+                    parsed['decision'] = val
+            elif "CONFIDENCE:" in line.upper():
                 try:
-                    parsed['confidence'] = float(line.split("CONFIDENCE:")[1].strip())
+                    parsed['confidence'] = float(line.split("CONFIDENCE:")[-1].strip())
                 except ValueError:
-                    parsed['confidence'] = 0  # fallback if N/A
-            elif "REASONING:" in line:
-                parsed['reasoning'] = line.split("REASONING:")[1].strip()
-            elif "RISK_NOTE:" in line:
-                parsed['risk_note'] = line.split("RISK_NOTE:")[1].strip()
+                    parsed['confidence'] = 0
+            elif "REASONING:" in line.upper():
+                parsed['reasoning'] = line.split("REASONING:")[-1].strip()
+            elif "RISK_NOTE:" in line.upper():
+                parsed['risk_note'] = line.split("RISK_NOTE:")[-1].strip()
 
-        return parsed if 'decision' in parsed else None
+        return parsed
 
     except Exception as e:
         print("⚠️ Failed to parse AI response:", e)
-        return None
+        return {
+            'decision': 'HOLD',
+            'confidence': 0,
+            'reasoning': 'Parsing failed.',
+            'risk_note': 'Error in response structure.'
+        }
+
 
 
 
@@ -86,8 +107,8 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
     Technicals decide direction. AI must confirm unless technical score is very strong.
     AI response must be in structured format: ENTRY_DECISION, CONFIDENCE, etc.
     """
-    required_score = CONFIG.get("min_score_for_trade", 3)
-    technical_score = 0
+    required_score = CONFIG.get("min_score_for_trade", 4.5)
+    technical_score = 0.0
 
     # Enforce H1/M15 trend agreement
     #h1 = ta_signals.get("h1_trend")
@@ -97,22 +118,23 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
       #  return "HOLD"
 
     if ta_signals.get("bos") in ["bullish", "bearish"]:
-        technical_score += 1
+        technical_score += 2.0
     if ta_signals.get("fvg_valid"):
-        technical_score += 1
+        technical_score += 2.0
     if ta_signals.get("ob_tap"):
-        technical_score += 1
+        technical_score += 1.5
     if ta_signals.get("rejection"):
-        technical_score += 1
+        technical_score += 1.0
     if ta_signals.get("false_break"):
-        technical_score += 1
+        technical_score += 1.0
     if ta_signals.get("engulfing"):
-        technical_score += 1
+        technical_score += 0.5
 
     trend = ta_signals.get("ema_trend", "")
     direction = "BUY" if trend == "bullish" else "SELL" if trend == "bearish" else None
 
-    print("📊 Technical Score:", technical_score)
+    print(f"📊 Technical Score: {round(technical_score, 2)} / 8.0")
+
     print("📉 EMA Trend:", trend)
 
     # === Override AI if technicals are very strong
@@ -174,7 +196,8 @@ def should_override_soft_limit(ta_signals, ai_response_raw, daily_loss, call_ai_
     Only trade if AI says: OVERRIDE_DECISION: YES
     """
     parsed = parse_ai_response(ai_response_raw)
-    if not parsed:
+    if not parsed or 'decision' not in parsed:
+        print("⚠️ Invalid AI response passed to soft limit override — skipping override.")
         return False  # default to conservative if AI couldn't be parsed
 
     prompt = build_soft_limit_override_prompt(

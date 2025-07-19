@@ -1,6 +1,7 @@
 import MetaTrader5 as mt5
 from config import CONFIG  # Load SL/TP from config
 from notifier import send_trade_notification
+import time
 
 # === MT5 Setup ===
 def initialize_mt5():
@@ -22,11 +23,33 @@ def resolve_symbol(base_symbol):
             return sym.name
     return base_symbol  # fallback
 
+def get_account_info_safe():
+    """
+    Safely fetches account info from MT5.
+    Attempts to recover if MT5 was disconnected or not logged in.
+    """
+    acc_info = mt5.account_info()
+
+    if acc_info is None:
+        print("⚠️ Account info unavailable. Attempting recovery...")
+        mt5.shutdown()
+        time.sleep(2)
+        initialize_mt5()
+
+        acc_info = mt5.account_info()
+        if acc_info is None:
+            print("❌ Account info still unavailable after recovery.")
+        else:
+            print(f"✅ MT5 recovered. Balance: {acc_info.balance}, Equity: {acc_info.equity}")
+
+    return acc_info
+
 # === Trade Execution with optional SL/TP ===
 def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_trend=None, ai_confidence=None, ai_reasoning=None, risk_note=None):
-    if not mt5.initialize():
-        raise RuntimeError(f"❌ MT5 not initialized: {mt5.last_error()}")
-
+    if not mt5.terminal_info():
+        print("❌ MT5 terminal not Connected - Cannot place trade.")
+        return False
+    
     resolved_symbol = resolve_symbol(symbol)
     print(f"🔍 Using resolved symbol: {resolved_symbol}")
 

@@ -38,10 +38,11 @@ from decision_engine import evaluate_trade_decision, calculate_dynamic_sl_tp, bu
 from broker_interface import initialize_mt5, shutdown_mt5, place_trade
 from config import CONFIG
 from trailing_stop import apply_trailing_stop
-from position_manager import check_for_2_percent_gain
+from position_manager import check_for_partial_close
 from risk_guard import can_trade
 from trade_logger import log_trade
-from notifier import send_trade_notification
+from utils import detect_session
+from news_guard import get_macro_sentiment
 
 # === Settings ===
 SYMBOLS = sys.argv[1:]
@@ -52,18 +53,6 @@ if not SYMBOLS:
 TIMEFRAME = mt5.TIMEFRAME_M15
 DELAY_SECONDS = CONFIG.get("delay_seconds", 60 * 15)
 LOT_SIZE = CONFIG.get("lot_size", 1.0)
-
-# === Session Detection ===
-def detect_session():
-    hour = datetime.now().hour
-    if 0 <= hour < 7:
-        return "Asia"
-    elif 7 <= hour < 12:
-        return "London"
-    elif 12 <= hour < 20:
-        return "New York"
-    else:
-        return "Post-Market"
 
 # === Parse AI Sentiment ===
 def parse_ai_sentiment(raw_response):
@@ -130,6 +119,12 @@ def run_bot():
 
     try:
         while True:
+            if not mt5.terminal_info() or not mt5.version():
+                print("⚠️ MT5 appears disconnected. Reinitializing...")
+                shutdown_mt5()
+                time.sleep(2)
+                initialize_mt5()
+
             now = datetime.now()
 
             for sym in trade_counter:
@@ -137,17 +132,23 @@ def run_bot():
                     t for t in trade_counter[sym]
                     if (now - t).total_seconds() < 3600
                 ]
+
             for symbol in SYMBOLS:
                 print(f"\n⏳ Analyzing {symbol}...")
-                ensure_symbol_visible(symbol)
-                time.sleep(0.5)  # ensure visibility is applied before querying
+
+                try:
+                    ensure_symbol_visible(symbol)
+                except Exception as e:
+                    print(f"❌ Failed to ensure symbol visibility for {symbol}: {e}")
+                    continue
+
+                time.sleep(0.5)
 
                 info = mt5.symbol_info(symbol)
+                symbol_key = symbol.upper() if info is None else info.name.upper()
                 if info is None:
-                    print(f"⚠️ Skipping {symbol} – could not resolve symbol info even after ensuring visibility.")
-                    symbol_key = symbol.upper()
-                else:
-                    symbol_key = info.name.upper()
+                    print(f"⚠️ Skipping {symbol} – could not resolve symbol info.")
+                    continue
 
                 candles_m15 = get_latest_candle_data(symbol, mt5.TIMEFRAME_M15)
                 candles_h1 = get_latest_candle_data(symbol, mt5.TIMEFRAME_H1)
@@ -160,7 +161,9 @@ def run_bot():
                 print("🕐 Current Session:", session)
                 print("🔍 TA Signals:", ta_signals)
 
-                prompt = build_ai_prompt(ta_signals=ta_signals, session_info=session, macro_sentiment="neutral")
+                macro_sentiment = get_macro_sentiment(symbol)
+                print("🌐 Macro Sentiment:", macro_sentiment)
+                prompt = build_ai_prompt(ta_signals=ta_signals, session_info=session, macro_sentiment=macro_sentiment)
                 ai_sentiment = get_ai_sentiment(prompt)
                 print("🧠 AI Response:\n", ai_sentiment.strip())
 
@@ -172,28 +175,25 @@ def run_bot():
                     print(f"⚠️ Skipped {symbol} — blocked by risk_guard.")
                     continue
 
-                # 🚨 Clean and enforce 2-per-hour rule per symbol
-                now = datetime.now()
-                symbol_key = symbol.upper()
                 trade_counter.setdefault(symbol_key, [])
-
-                # Remove timestamps older than 1 hour
                 trade_counter[symbol_key] = [
                     t for t in trade_counter[symbol_key]
                     if (now - t).total_seconds() < 3600
                 ]
 
-                # Debug print to confirm tracking
                 print(f"📊 Trades on {symbol_key} in last hour: {len(trade_counter[symbol_key])}")
-
-                # Block trade if over limit
                 if len(trade_counter[symbol_key]) >= 2:
-                    print(f"⛔ Skipping {symbol_key}: 2-trade-per-hour limit reached.")
+                    print(f"⛔ Skipping {symbol_key}:2-trade-per-hour limit reached.")
                     continue
-
 
                 if decision in ["BUY", "SELL"]:
                     try:
+                        if not mt5.terminal_info() or not mt5.version():
+                            print("⚠️ Reinitializing MT5 before trade placement...")
+                            shutdown_mt5()
+                            time.sleep(2)
+                            initialize_mt5()
+
                         price = candles_m15.iloc[-1]["close"]
                         sl, tp = calculate_dynamic_sl_tp(price, decision, candles_m15)
                         lot_sizes = {k.upper(): v for k, v in CONFIG.get("LOT_SIZES", {}).items()}
@@ -204,7 +204,18 @@ def run_bot():
                         print(f"🚀 Preparing to place trade: {symbol} | Direction: {decision}")
 
                         ai_data = parse_ai_sentiment(ai_sentiment)
-                        tech_score = ta_signals.get("score", "N/A")
+
+                        # Compute updated technical score
+                        technical_score = sum([
+                            ta_signals.get("fvg_valid", False),
+                            ta_signals.get("ob_tap", False),
+                            ta_signals.get("rejection", False),
+                            ta_signals.get("false_break", False),
+                            ta_signals.get("engulfing", False),
+                            ta_signals.get("ema_trend", "") == ta_signals.get("h1_trend", "")
+                        ])
+                        tech_score = f"{technical_score:.1f} / 8.0"
+
                         ema_trend = ta_signals.get("ema_trend", ta_signals.get("h1_trend", "N/A"))
 
                         success = place_trade(
@@ -223,28 +234,13 @@ def run_bot():
                         if success:
                             log_trade(symbol, decision, lot, sl, tp, price, result="EXECUTED")
                             trade_counter[symbol_key].append(now)
-                            send_trade_notification(
-                                symbol=symbol,
-                                direction=decision,
-                                entry=price,
-                                sl=sl,
-                                tp=tp,
-                                lot=lot,
-                                tech_score=tech_score,
-                                ema_trend=ema_trend,
-                                ai_confidence=ai_data["confidence"],
-                                ai_reasoning=ai_data["reasoning"],
-                                risk_note=ai_data["risk_note"]
-                            )
-                        else:
-                            log_trade(symbol, decision, lot, sl, tp, price, result="FAILED")
 
                     except Exception as err:
                         print(f"❌ SL/TP or lot sizing error: {err}")
                         log_trade(symbol, decision, lot, sl, tp, price, result=f"FAILED: {err}")
 
             apply_trailing_stop(minutes=30, trail_pips=20)
-            check_for_2_percent_gain()
+            check_for_partial_close()
 
             print(f"⏲ Waiting {DELAY_SECONDS / 60} minutes...")
             time.sleep(DELAY_SECONDS)
@@ -253,9 +249,15 @@ def run_bot():
         print("🛑 Bot stopped by user.")
     except Exception as e:
         print(f"❌ Unhandled error: {e}")
+        if "not found" in str(e).lower() or "not initialized" in str(e).lower():
+            print("🔁 Attempting to reinitialize MT5...")
+            shutdown_mt5()
+            time.sleep(2)
+            initialize_mt5()
+        else:
+            raise
     finally:
         shutdown_mt5()
-
 
 if __name__ == "__main__":
     run_bot()

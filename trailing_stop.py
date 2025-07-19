@@ -2,10 +2,15 @@ import MetaTrader5 as mt5
 from datetime import datetime, timedelta
 
 def apply_trailing_stop(minutes=30, trail_pips=20):
+
+    if not mt5.terminal_info():
+       #print("⚠️ MT5 not initialized. Skipping trailing SL.")
+        return
+
     positions = mt5.positions_get()
     if not positions:
         return
-
+    
     for pos in positions:
         open_time = datetime.fromtimestamp(pos.time)
         if datetime.now() - open_time < timedelta(minutes=minutes):
