@@ -46,7 +46,7 @@ Here is the current signal context:
 - OB Tap: {ta_signals.get('ob_tap')}
 - FVG Valid: {ta_signals.get('fvg_valid')}
 - Rejection: {ta_signals.get('rejection')}
-- False Break: {ta_signals.get('false_break')}
+- Liquidity Sweep: {ta_signals.get('liquidity_sweep')}
 - Engulfing: {ta_signals.get('engulfing')}
 
 [SESSION CONTEXT]
@@ -111,11 +111,11 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
     technical_score = 0.0
 
     # Enforce H1/M15 trend agreement
-    #h1 = ta_signals.get("h1_trend")
-    #m15 = ta_signals.get("ema_trend")
-    #if h1 and m15 and h1 != m15:
-     #   print(f"🔁 Skipping: H1 ({h1}) and M15 ({m15}) trend mismatch.")
-      #  return "HOLD"
+    # h1 = ta_signals.get("h1_trend")
+    # m15 = ta_signals.get("ema_trend")
+    # if h1 and m15 and h1 != m15:
+    #     print(f"🔁 Skipping: H1 ({h1}) and M15 ({m15}) trend mismatch.")
+    #     return "HOLD"
 
     if ta_signals.get("bos") in ["bullish", "bearish"]:
         technical_score += 2.0
@@ -125,7 +125,7 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
         technical_score += 1.5
     if ta_signals.get("rejection"):
         technical_score += 1.0
-    if ta_signals.get("false_break"):
+    if ta_signals.get("liquidity_sweep"):
         technical_score += 1.0
     if ta_signals.get("engulfing"):
         technical_score += 0.5
@@ -134,8 +134,24 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
     direction = "BUY" if trend == "bullish" else "SELL" if trend == "bearish" else None
 
     print(f"📊 Technical Score: {round(technical_score, 2)} / 8.0")
-
     print("📉 EMA Trend:", trend)
+
+    # === PM Session USD/US Asset Filter ===
+    from datetime import datetime
+    now = datetime.now()
+    current_hour = now.hour
+    pm_start = CONFIG.get("pm_session_start", 17)
+    pm_end = CONFIG.get("pm_session_end", 21)
+    usd_keywords = CONFIG.get("usd_related_keywords", [])
+    min_pm_score = CONFIG.get("pm_usd_asset_min_score", 6)
+
+    symbol = ta_signals.get("symbol", "").upper()
+
+    if pm_start <= current_hour < pm_end:
+        if any(keyword in symbol for keyword in usd_keywords):
+            if technical_score < min_pm_score:
+                print(f"🕔 PM Session: {symbol} blocked – score {technical_score}/8 below minimum {min_pm_score}")
+                return "HOLD"
 
     # === Override AI if technicals are very strong
     if technical_score >= 5 and direction:
@@ -155,6 +171,7 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
         print("❌ Could not parse AI. Defaulting to HOLD.")
         return "HOLD"
 
+
 def build_soft_limit_override_prompt(ta_signals: dict, ai_decision: str, confidence: float, daily_loss: float):
     return f"""
 You are a trading risk manager monitoring an AI forex trading bot named D.E.V.I. The bot has lost ${abs(daily_loss):,.2f} today, which is more than 50% of its allowed daily risk limit.
@@ -165,7 +182,7 @@ Here is the current technical setup:
 - OB Tap: {ta_signals.get('ob_tap')}
 - FVG Valid: {ta_signals.get('fvg_valid')}
 - Rejection: {ta_signals.get('rejection')}
-- False Break: {ta_signals.get('false_break')}
+- Liquidity Sweep: {ta_signals.get('liquidity_sweep')}
 - Engulfing Pattern: {ta_signals.get('engulfing')}
 - Session: {ta_signals.get('session')}
 - AI Decision: {ai_decision} with confidence {confidence}/10
@@ -257,7 +274,7 @@ if __name__ == "__main__":
         "fvg_valid": True,
         "ob_tap": True,
         "rejection": True,
-        "false_break": True,
+        "liquidity_sweep": True,
         "engulfing": True,
         "ema_trend": "bullish"
     }

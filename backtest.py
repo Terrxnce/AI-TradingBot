@@ -25,7 +25,7 @@ def calculate_score(signals):
         score += 1.5
     if signals.get("rejection"):
         score += 1
-    if signals.get("false_break"):
+    if signals.get("liquidity_sweep"):
         score += 1
     if signals.get("engulfing"):
         score += 0.5

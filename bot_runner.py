@@ -3,28 +3,6 @@
 #
 # 👨‍💻 Author: Terrence Ndifor (Terry)
 # 📂 Project: Smart Multi-Timeframe Trading Bot
-#
-# 🔁 This script continuously runs your trading bot:
-#    • Fetches candles from MetaTrader 5 for each symbol
-#    • Performs full technical analysis (structure, FVG, OB, BOS, etc.)
-#    • Evaluates EMA trend and market condition on selected timeframe
-#    • Sends TA signals to a local LLaMA3 AI for macroeconomic sentiment
-#    • AI returns directional bias (bullish, bearish, neutral) with reasoning
-#    • Combines TA + AI sentiment to decide: BUY, SELL, or HOLD
-#    • Automatically calculates SL/TP dynamically
-#    • Places trade via MetaTrader5 interface (if conditions are met)
-#
-# 🛠️ Configurable via `config.py`:
-#    • Lot size, SL/TP logic, EMA threshold by timeframe
-#    • Timeframe used for technical analysis (M15, H1, H4, etc.)
-#    • Delay between bot cycles (in seconds)
-#    • Minimum technical score threshold for valid trades
-#
-# ▶️ Usage Example:
-#     python bot_runner.py EURUSD XAUUSD US30 GOLD
-#
-# 🔄 Loops every X minutes and analyzes each pair in sequence
-# 🧠 Uses local Ollama instance with "openchat:latest" for LLM reasoning
 # ------------------------------------------------------------------------------------
 
 import sys
@@ -42,11 +20,12 @@ from position_manager import check_for_partial_close
 from risk_guard import can_trade
 from trade_logger import log_trade
 from session_utils import detect_session
-
-
-
-
 from news_guard import get_macro_sentiment
+from profit_guard import check_and_lock_profits
+
+
+
+from datetime import time as dt_time
 
 # === Settings ===
 SYMBOLS = sys.argv[1:]
@@ -58,17 +37,16 @@ TIMEFRAME = mt5.TIMEFRAME_M15
 DELAY_SECONDS = CONFIG.get("delay_seconds", 60 * 15)
 LOT_SIZE = CONFIG.get("lot_size", 1.0)
 
+def is_pm_session():
+    now = datetime.now().time()
+    return dt_time(17, 0) <= now <= dt_time(21, 0)
+
 # === Parse AI Sentiment ===
 def parse_ai_sentiment(raw_response):
     lines = raw_response.strip().splitlines()
-    parsed = {
-        "confidence": "N/A",
-        "reasoning": "",
-        "risk_note": ""
-    }
+    parsed = {"confidence": "N/A", "reasoning": "", "risk_note": ""}
     current_section = None
     buffer = []
-
     for line in lines:
         line = line.strip()
         if line.startswith("CONFIDENCE:"):
@@ -84,12 +62,10 @@ def parse_ai_sentiment(raw_response):
             buffer = [line.split(":", 1)[-1].strip()]
         elif current_section:
             buffer.append(line)
-
     if current_section == "reasoning":
         parsed["reasoning"] = " ".join(buffer).strip()
     elif current_section == "risk_note":
         parsed["risk_note"] = " ".join(buffer).strip()
-
     return parsed
 
 # === AI Sentiment ===
@@ -101,7 +77,7 @@ def get_ai_sentiment(prompt):
             json={"model": "openchat:latest", "prompt": prompt, "stream": False},
             timeout=180
         )
-        print("🛁 Response received!")
+        print("💫 Response received!")
         return response.json().get("response", "")
     except Exception as e:
         print("❌ AI sentiment fetch failed:", e)
@@ -130,22 +106,33 @@ def run_bot():
                 initialize_mt5()
 
             now = datetime.now()
+            current_hour = now.hour
 
             for sym in trade_counter:
-                trade_counter[sym] = [
-                    t for t in trade_counter[sym]
-                    if (now - t).total_seconds() < 3600
-                ]
+                trade_counter[sym] = [t for t in trade_counter[sym] if (now - t).total_seconds() < 3600]
 
             for symbol in SYMBOLS:
                 print(f"\n⏳ Analyzing {symbol}...")
+
+                # ✅ NEW: Secure profits before new trades are considered
+                check_and_lock_profits()
+
+                # USD asset restriction
+                if CONFIG.get("restrict_usd_to_am", False):
+                    keywords = CONFIG.get("usd_related_keywords", [])
+                    if any(k in symbol.upper() for k in keywords):
+                        time_window = CONFIG.get("allowed_trading_window", {})
+                        start = time_window.get("start_hour", 9)
+                        end = time_window.get("end_hour", 11)
+                        if not (start <= current_hour < end):
+                            print(f"⏳ Skipping {symbol} — outside {start}:00–{end}:00 window for USD-related pairs.")
+                            continue
 
                 try:
                     ensure_symbol_visible(symbol)
                 except Exception as e:
                     print(f"❌ Failed to ensure symbol visibility for {symbol}: {e}")
                     continue
-
                 time.sleep(0.5)
 
                 info = mt5.symbol_info(symbol)
@@ -162,32 +149,47 @@ def run_bot():
                 session = detect_session()
 
                 ta_signals = {**ta_m15, "h1_trend": ta_h1["ema_trend"], "session": session}
-                print("🕐 Current Session:", session)
+                ta_signals["symbol"] = symbol
+
+                print("🕒 Current Session:", session)
                 print("🔍 TA Signals:", ta_signals)
 
                 macro_sentiment = get_macro_sentiment(symbol)
-                print("🌐 Macro Sentiment:", macro_sentiment)
                 prompt = build_ai_prompt(ta_signals=ta_signals, session_info=session, macro_sentiment=macro_sentiment)
                 ai_sentiment = get_ai_sentiment(prompt)
                 print("🧠 AI Response:\n", ai_sentiment.strip())
 
+                if CONFIG.get("enable_pm_session_only", False) and not is_pm_session():
+                    print(f"⏳ Skipping {symbol} — outside PM session window.")
+                    continue
+
                 decision = evaluate_trade_decision(ta_signals, ai_sentiment)
                 print(f"📈 Trade Decision: {decision}")
-                print(f"🔍 Raw decision value: [{decision}] (type: {type(decision)})")
 
-                if not can_trade(ta_signals=ta_signals, ai_response_raw=ai_sentiment, call_ai_func=get_ai_sentiment):
+                # Recalculate technical_score for risk_guard override
+                technical_score = 0.0
+                if ta_signals.get("bos") in ["bullish", "bearish"]:
+                    technical_score += 2.0
+                if ta_signals.get("fvg_valid"):
+                    technical_score += 2.0
+                if ta_signals.get("ob_tap"):
+                    technical_score += 1.5
+                if ta_signals.get("rejection"):
+                    technical_score += 1.0
+                if ta_signals.get("liquidity_sweep"):
+                    technical_score += 1.0
+                if ta_signals.get("engulfing"):
+                    technical_score += 0.5
+
+                if not can_trade(ta_signals=ta_signals, ai_response_raw=ai_sentiment, call_ai_func=get_ai_sentiment, tech_score=technical_score):
                     print(f"⚠️ Skipped {symbol} — blocked by risk_guard.")
                     continue
 
                 trade_counter.setdefault(symbol_key, [])
-                trade_counter[symbol_key] = [
-                    t for t in trade_counter[symbol_key]
-                    if (now - t).total_seconds() < 3600
-                ]
+                trade_counter[symbol_key] = [t for t in trade_counter[symbol_key] if (now - t).total_seconds() < 3600]
 
-                print(f"📊 Trades on {symbol_key} in last hour: {len(trade_counter[symbol_key])}")
                 if len(trade_counter[symbol_key]) >= 2:
-                    print(f"⛔ Skipping {symbol_key}:2-trade-per-hour limit reached.")
+                    print(f"❌ Skipping {symbol_key}: 2-trade-per-hour limit reached.")
                     continue
 
                 if decision in ["BUY", "SELL"]:
@@ -203,23 +205,10 @@ def run_bot():
                         lot_sizes = {k.upper(): v for k, v in CONFIG.get("LOT_SIZES", {}).items()}
                         lot = lot_sizes.get(symbol_key, CONFIG.get("lot_size", 1.0))
 
-                        print(f"🧮 Resolved lot size for {symbol}: {lot}")
+                        print(f"🧶 Resolved lot size for {symbol}: {lot}")
                         print(f"🎯 Dynamic SL: {sl} | TP: {tp} | Lot: {lot}")
-                        print(f"🚀 Preparing to place trade: {symbol} | Direction: {decision}")
 
                         ai_data = parse_ai_sentiment(ai_sentiment)
-
-                        # Compute updated technical score
-                        technical_score = sum([
-                            ta_signals.get("fvg_valid", False),
-                            ta_signals.get("ob_tap", False),
-                            ta_signals.get("rejection", False),
-                            ta_signals.get("false_break", False),
-                            ta_signals.get("engulfing", False),
-                            ta_signals.get("ema_trend", "") == ta_signals.get("h1_trend", "")
-                        ])
-                        tech_score = f"{technical_score:.1f} / 8.0"
-
                         ema_trend = ta_signals.get("ema_trend", ta_signals.get("h1_trend", "N/A"))
 
                         success = place_trade(
@@ -228,7 +217,7 @@ def run_bot():
                             lot=lot,
                             sl=sl,
                             tp=tp,
-                            tech_score=tech_score,
+                            tech_score=f"{technical_score:.1f} / 8.0",
                             ema_trend=ema_trend,
                             ai_confidence=ai_data["confidence"],
                             ai_reasoning=ai_data["reasoning"],
@@ -238,19 +227,17 @@ def run_bot():
                         if success:
                             log_trade(symbol, decision, lot, sl, tp, price, result="EXECUTED")
                             trade_counter[symbol_key].append(now)
-
                     except Exception as err:
                         print(f"❌ SL/TP or lot sizing error: {err}")
                         log_trade(symbol, decision, lot, sl, tp, price, result=f"FAILED: {err}")
 
             apply_trailing_stop(minutes=30, trail_pips=20)
             check_for_partial_close()
-
             print(f"⏲ Waiting {DELAY_SECONDS / 60} minutes...")
             time.sleep(DELAY_SECONDS)
 
     except KeyboardInterrupt:
-        print("🛑 Bot stopped by user.")
+        print("🚑 Bot stopped by user.")
     except Exception as e:
         print(f"❌ Unhandled error: {e}")
         if "not found" in str(e).lower() or "not initialized" in str(e).lower():

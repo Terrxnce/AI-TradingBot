@@ -98,17 +98,23 @@ class TechnicalAnalyzer:
         return bos
 
 
-    def detect_false_breaks(self, swing_lookback=5):
+    def detect_liquidity_sweeps(self, lookback=10, epsilon=0.001):
         sweeps = []
-        for i in range(swing_lookback, len(self.df)):
-            local_high = self.df['high'][i - swing_lookback:i].max()
-            local_low = self.df['low'][i - swing_lookback:i].min()
+        for i in range(lookback, len(self.df)):
             c = self.df.iloc[i]
-            if c['high'] > local_high and c['close'] < local_high:
-                sweeps.append((i, 'bullish', local_high))
-            elif c['low'] < local_low and c['close'] > local_low:
-                sweeps.append((i, 'bearish', local_low))
+            prior_high = self.df['high'][i - lookback:i].max()
+            prior_low = self.df['low'][i - lookback:i].min()
+
+            # Bullish Liquidity Sweep (break high, close below it)
+            if c['high'] > prior_high * (1 + epsilon) and c['close'] < prior_high:
+                sweeps.append((i, 'bullish', prior_high))
+
+            # Bearish Liquidity Sweep (break low, close above it)
+            elif c['low'] < prior_low * (1 - epsilon) and c['close'] > prior_low:
+                sweeps.append((i, 'bearish', prior_low))
+
         return sweeps
+
 
     def check_ob_fvg_rejection(self, max_lookahead=10):
         rejections, all_zones = [], []
@@ -134,7 +140,7 @@ class TechnicalAnalyzer:
             "fvg": self.detect_fvg(),
             "order_blocks": self.detect_order_blocks(),
             "bos": self.detect_bos(),
-            "false_breaks": self.detect_false_breaks(),
+            "liquidity_sweeps": self.detect_liquidity_sweeps(),
             "engulfings": self.detect_engulfing(),
             "rejections": self.check_ob_fvg_rejection(),
             "df": self.df
@@ -193,7 +199,7 @@ def analyze_structure(candles_df, candles_df_h1=None, timeframe=mt5.TIMEFRAME_M1
         "fvg_valid": any(fvg[1] == trend for fvg in result["fvg"]),
         "ob_tap": any(ob[1] == trend for ob in result["order_blocks"]),
         "rejection": len(result["rejections"]) > 0,
-        "false_break": len(result["false_breaks"]) > 0,
+        "liquidity_sweep": len(result["liquidity_sweeps"]) > 0,
         "engulfing": any(e[1] == trend for e in result["engulfings"]),
         "ema_trend": trend,
         "h1_trend": h1_trend,
