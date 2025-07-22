@@ -36,7 +36,7 @@ CONFIG = {
     "tp_pips": 100,
     "lot_size": 0.25,
     "LOT_SIZES": {
-        "XAUUSD": 0.5,
+        "XAUUSD": 0.01,
         "US500.cash": 3.5,
         "EURUSD": 0.25,
         "GBPUSD": 0.25,
@@ -54,13 +54,14 @@ CONFIG = {
 
     "partial_close_trigger_percent": 1.0,  # 1% of balance
 
-    "session_hours": {
-    "Asia": [1,7],
-    "London": [8,12],
-    "New York Pre-Market": [13.5, 14],
-    "New York": [14, 20],
-    "Post-Market": [20, 24]
+"session_hours": {
+    "Asia": (1, 7),
+    "London": (8, 12),
+    "New York Pre-Market": (13.5, 14),
+    "New York": (14, 20),
+    "Post-Market": (20, 24)
 }
+
 }
 
 

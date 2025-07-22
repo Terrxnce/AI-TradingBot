@@ -83,7 +83,7 @@ def run_backtest(df, window_size=300, verbose=False):
 
 
 if __name__ == "__main__":
-    CSV_PATH = "data/EURUSD_M15.csv"
+    CSV_PATH = "data/GBPJPY_M15.csv"
     START_DATE = "2024-01-01"
     END_DATE = "2024-07-01"
     df = load_csv_data(CSV_PATH, START_DATE, END_DATE)

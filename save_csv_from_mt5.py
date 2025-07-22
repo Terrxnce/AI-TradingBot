@@ -5,11 +5,11 @@ import pandas as pd
 from datetime import datetime
 
 # === CONFIG ===
-symbol = "EURUSD"
+symbol = "GBPJPY"
 timeframe = mt5.TIMEFRAME_M15
 from_date = datetime(2024, 1, 1)
 to_date = datetime(2024, 7, 1)
-output_path = "data/EURUSD_M15.csv"
+output_path = "data/GBPJPY_M15.csv"
 
 # === CONNECT TO MT5 ===
 if not mt5.initialize():

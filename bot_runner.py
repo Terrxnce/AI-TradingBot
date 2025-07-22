@@ -41,7 +41,11 @@ from trailing_stop import apply_trailing_stop
 from position_manager import check_for_partial_close
 from risk_guard import can_trade
 from trade_logger import log_trade
-from utils import detect_session
+from session_utils import detect_session
+
+
+
+
 from news_guard import get_macro_sentiment
 
 # === Settings ===

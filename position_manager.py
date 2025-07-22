@@ -63,6 +63,13 @@ def check_for_partial_close():
                 })
                 if result_close.retcode == mt5.TRADE_RETCODE_DONE:
                     print(f"✅ Closed 50% of {symbol} @ {price}")
+
+                    DEFAULT_LOT = CONFIG["lot_size"]
+                    CONFIG["LOT_SIZES"][symbol.upper()] = DEFAULT_LOT
+                    print(f"🔁 Lot size for {symbol.upper()} reset to config default: {DEFAULT_LOT}")
+
+                if result_close.retcode == mt5.TRADE_RETCODE_DONE:
+                    print(f"✅ Closed 50% of {symbol} @ {price}")
                 else:
                     print(f"❌ Failed to close 50% of {symbol}: {result_close.retcode} | {result_close.comment}")
             else:

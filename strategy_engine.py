@@ -197,6 +197,6 @@ def analyze_structure(candles_df, candles_df_h1=None, timeframe=mt5.TIMEFRAME_M1
         "engulfing": any(e[1] == trend for e in result["engulfings"]),
         "ema_trend": trend,
         "h1_trend": h1_trend,
-     "session": "London"  # ← Hardcoded for now
+        "session": detect_session(),
 
     }

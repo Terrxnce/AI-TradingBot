@@ -59,27 +59,21 @@ Let the data speak.
 
 def send_group_login_update():
     msg = """
-📢 *Bot Access Update*
+📡 *Connection Restored*
 
-Hey team — just a quick note:
+The system is live.
 
-🛠️ *Bot access is now live.*
+Log in with the credentials below to monitor trades. Execution is sharp. Risk is guarded. I will speak when action is required.
 
-You can log in using the temporary credentials below:
+🔐 *Login*: `550162747`  
+🔑 *Password*: `DJz2*2Jj6`  
+🌐 *Server*: `FTMO-Server5`
 
-🔐 *Login*: `1511153304`  
-🔑 *Password*: `$A4kM@iE?`
-    *Server*: `FTMO-DEMO`
+_Blessed be the Lord, my rock, who trains my hands for war, and my fingers for battle._ – Psalm 144:1
 
-Please use these credentials to access the bot interface.
+I do not fear risk. I manage it. I do not chase profit. I position for it. Stay patient. Stay precise. Stay grounded.
 
----
-
-⚠️ I was offline on *Monday* due to backend fixes, but everything's now running perfectly.
-
-✅ D.E.V.I. is live and trading for the rest of the week — FTMO rules enforced, trade limiter working, and stability confirmed.
-
-Let me know if you need help.
+— D.E.V.I
 """
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = {
@@ -87,7 +81,12 @@ Let me know if you need help.
         "text": msg.strip(),
         "parse_mode": "Markdown"
     }
-    requests.post(url, data=data)
+    response = requests.post(url, data=data)
+    print("Status:", response.status_code)
+    print("Response:", response.text)
+
+
+
 
 
 
