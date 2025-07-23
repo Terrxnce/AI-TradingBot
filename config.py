@@ -18,7 +18,7 @@
 # ------------------------------------------------------------------------------------
 
 FTMO_PARAMS = {
-    "initial_balance": 10_000,  # Replace with actual
+    "initial_balance": 10_000,
     "max_daily_loss_pct": 0.05,
     "max_total_loss_pct": 0.10,
     "profit_target_pct": 0.10,
@@ -27,12 +27,14 @@ FTMO_PARAMS = {
 
 CONFIG = {
 
+    # ✅ Trade Requirements
     "min_score_for_trade": 4.5,
     "sl_pips": 50,
-    "delay_seconds": 60 * 15,  # 15 minutes
     "tp_pips": 100,
-    "lot_size": 0.01,
+    "delay_seconds": 60 * 15,  # 15-minute loop
 
+    # ✅ Symbol-Specific Lot Sizes
+    "lot_size": 1.0,
     "LOT_SIZES": {
         "XAUUSD": 0.01,
         "US500.cash": 3.5,
@@ -41,10 +43,12 @@ CONFIG = {
         "GER40.cash": 1.5,
     },
 
+    # ✅ Structure Toggles
     "use_engulfing": True,
     "use_bos": True,
     "use_liquidity_sweep": True,
 
+    # ✅ EMA Threshold by Timeframe
     "ema_trend_threshold": {
         "M15": 0.0003,
         "H1": 0.0005,
@@ -52,45 +56,46 @@ CONFIG = {
         "D1": 0.002
     },
 
-    "partial_close_trigger_percent": 1.0,  # 1% of balance
-    
+    # ✅ Partial + Full Close Settings (Profit Guard)
+    "partial_close_trigger_percent": 1.0,
+    "full_close_trigger_percent": 2.0,
 
+    # ✅ Session Hours
     "session_hours": {
         "Asia": (1, 7),
         "London": (8, 12),
         "New York Pre-Market": (13.5, 14),
         "New York": (14, 20),
         "Post-Market": (20, 24)
-        
     },
-    
 
-    # 🔧 PnL Guard Settings
-    "pnl_drawdown_limit": -0.5,  # % of balance
-    "cooldown_minutes_after_recovery": 15,  # Minutes to wait after PnL is back above 0
+    # ✅ Cooldown Settings
+    "pnl_drawdown_limit": -0.5,
+    "cooldown_minutes_after_recovery": 15,
 
-    # ⏰ Session Filters for PM Trading
-    "pm_session_start": 17,  # Local time (24h)
+    # ✅ PM Filters
+    "pm_session_start": 17,
     "pm_session_end": 21,
-
-    # 🎯 PM Score Filter for USD Assets
     "pm_usd_asset_min_score": 6,
 
-    # 🧠 Keywords to detect USD pairs and US indices
+    # ✅ USD Control (Trading Window + Filter)
     "usd_related_keywords": ["USD", "US500", "US30", "NAS100"],
-
-    # 🕒 Restrict USD-Related Assets to 9–11 AM Only
     "restrict_usd_to_am": True,
     "allowed_trading_window": {
         "start_hour": 14,
         "end_hour": 16,
     },
 
-        # 🔒 Profit Lock Settings
-    "global_profit_lock_percent": 2.0,  # Lock all trades at 2% floating profit
-    "global_profit_lock_cooldown_minutes": 60,  # Optional cooldown to avoid re-trigger
+    # ✅ RSI Settings
+    "use_rsi": True,
+    "rsi_period": 14,
+    "rsi_upper": 70,
+    "rsi_lower": 30,
 
+    # ✅ Fibonacci Settings
+    "use_fib": True,
+    "fib_window": 30,  # candles to look back for swing
+    "fib_zone": (0.5, 0.618),
 }
-
 
 # Add any other configuration options you need here

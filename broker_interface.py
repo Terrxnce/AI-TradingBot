@@ -49,7 +49,7 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_
     if not mt5.terminal_info():
         print("❌ MT5 terminal not Connected - Cannot place trade.")
         return False
-    
+
     resolved_symbol = resolve_symbol(symbol)
     print(f"🔍 Using resolved symbol: {resolved_symbol}")
 
@@ -96,14 +96,14 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_
         sl = price - sl_distance if action == "BUY" else price + sl_distance
         tp = price + tp_distance if action == "BUY" else price - tp_distance
 
-    print(f"🧮 Price: {price:.{digits}f} | SL: {sl:.{digits}f} | TP: {tp:.{digits}f}")
+    print(f"🧲 Price: {price:.{digits}f} | SL: {sl:.{digits}f} | TP: {tp:.{digits}f}")
 
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": resolved_symbol,
         "volume": lot,
         "type": order_type,
-        "price": price,
+        "price": round(price, digits),
         "sl": round(sl, digits),
         "tp": round(tp, digits),
         "deviation": deviation,
@@ -115,15 +115,19 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_
 
     result = mt5.order_send(request)
 
+    if result is None or not hasattr(result, 'retcode'):
+        print(f"❌ Order send failed. No result returned.")
+        return False
+
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         if result.retcode == 10018:
             print(f"⚠️ Market closed for {resolved_symbol}. Skipping trade.")
         else:
-            print(f"❌ Trade failed: {result.retcode} - {result.comment}")
+            print(f"❌ Trade failed: {result.retcode} - {getattr(result, 'comment', 'No comment')}")
         return False
     else:
         print(f"✅ Trade executed: {action} {resolved_symbol} @ {price:.{digits}f}")
-        
+
         # === Send Telegram Signal ===
         try:
             send_trade_notification(

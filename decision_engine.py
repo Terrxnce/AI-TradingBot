@@ -28,6 +28,14 @@ import re
 from datetime import datetime
 
 def build_ai_prompt(ta_signals: dict, macro_sentiment: str = "", session_info: str = ""):
+    impulse_line = ""
+    if ta_signals.get("impulse_move"):
+        impulse_line = f"- Recent {ta_signals['impulse_move']} impulse detected on M15\n"
+
+    confluence_lines = ""
+    if ta_signals.get("confluence_context"):
+        confluence_lines = "\n".join(f"- {line}" for line in ta_signals["confluence_context"]) + "\n"
+
     return f"""
 You are D.E.V.I, a structure-based AI trading assistant. You specialize in high-probability intraday trades on forex and indices, using technical confluence and market timing. You do not guess — if the setup isn't clear, you HOLD.
 
@@ -48,8 +56,7 @@ Here is the current signal context:
 - Rejection: {ta_signals.get('rejection')}
 - Liquidity Sweep: {ta_signals.get('liquidity_sweep')}
 - Engulfing: {ta_signals.get('engulfing')}
-
-[SESSION CONTEXT]
+{impulse_line}{confluence_lines}[SESSION CONTEXT]
 - Current Session: {session_info}
 
 [MACRO CONTEXT]
@@ -62,6 +69,7 @@ CONFIDENCE: [0–10]
 REASONING: [Summarize the logic]  
 RISK_NOTE: [Comment on timing, structure quality, or hesitation factors]
 """
+
 
 def parse_ai_response(response: str):
     try:

@@ -28,6 +28,9 @@ import MetaTrader5 as mt5
 from datetime import datetime
 from config import CONFIG
 from session_utils import detect_session
+from impulse_detector import detect_impulsive_move
+from rsi_fib_confluence import fib_confluence, rsi_support
+
 
 
 class TechnicalAnalyzer:
@@ -185,9 +188,27 @@ def analyze_structure(candles_df, candles_df_h1=None, timeframe=mt5.TIMEFRAME_M1
 
     latest_bos = result["bos"][-1][1] if result["bos"] else None
 
+    # ✅ Impulse Detection
+    impulse = detect_impulsive_move(candles_df)
+    confluence_context = []
+
+    if impulse:
+        # Only check Fib/RSI if impulse is valid
+        fib_hit, fib_text = fib_confluence(candles_df, impulse)
+        rsi_ok, rsi_text = rsi_support(candles_df)
+
+        if fib_hit:
+            confluence_context.append(fib_text)
+        if rsi_ok:
+            confluence_context.append(rsi_text)
+
+    # 🔍 Logs
     print("📈 EMA Values → EMA_21:", row['EMA_21'], "| EMA_50:", row['EMA_50'], "| EMA_200:", row['EMA_200'])
     print("📊 Final EMA trend classification:", trend)
     print("🔍 Latest BOS:", latest_bos)
+    print("🧠 Impulse Detected:", impulse)
+    if confluence_context:
+        print("🧩 RSI/Fib Context:", " | ".join(confluence_context))
     print("🕐 Current Session:", detect_session())
     print("✅ analyze_structure() completed for", candles_df.iloc[-1]["time"])
 
@@ -204,5 +225,6 @@ def analyze_structure(candles_df, candles_df_h1=None, timeframe=mt5.TIMEFRAME_M1
         "ema_trend": trend,
         "h1_trend": h1_trend,
         "session": detect_session(),
-
+        "impulse_move": impulse,
+        "confluence_context": confluence_context  # ✅ For AI only
     }
