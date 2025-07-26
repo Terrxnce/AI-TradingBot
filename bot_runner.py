@@ -69,21 +69,34 @@ def parse_ai_sentiment(raw_response):
         parsed["risk_note"] = " ".join(buffer).strip()
     return parsed
 
-def log_ai_decision(symbol, ai_data, timestamp=None):
+def log_ai_decision(symbol, ai_data, timestamp=None, extra_fields=None):
     """
-    Append AI decision to ai_decision_log.jsonl
+    Append full AI decision to ai_decision_log.jsonl
+    including technical + override metadata if available.
     """
     entry = {
         "timestamp": timestamp or datetime.now().isoformat(),
         "symbol": symbol,
-        "confidence": ai_data.get("confidence", "N/A"),
-        "reasoning": ai_data.get("reasoning", ""),
-        "risk_note": ai_data.get("risk_note", "")
+        "ai_decision": ai_data.get("decision", "N/A"),
+        "ai_confidence": ai_data.get("confidence", "N/A"),
+        "ai_reasoning": ai_data.get("reasoning", ""),
+        "ai_risk_note": ai_data.get("risk_note", ""),
+        "technical_score": ai_data.get("technical_score", "N/A"),
+        "ema_trend": ai_data.get("ema_trend", "N/A"),
+        "final_direction": ai_data.get("final_direction", "HOLD"),
+        "executed": ai_data.get("executed", False),
+        "ai_override": ai_data.get("ai_override", False),
+        "override_reason": ai_data.get("override_reason", ""),
+        "execution_source": ai_data.get("execution_source", "N/A")
     }
+
+    if extra_fields:
+        entry.update(extra_fields)
 
     try:
         with open("ai_decision_log.jsonl", "a") as f:
             f.write(json.dumps(entry) + "\n")
+        print(f"✅ AI decision logged for {symbol}")
     except Exception as e:
         print(f"❌ Failed to write AI decision log: {e}")
 
