@@ -28,7 +28,7 @@ FTMO_PARAMS = {
 CONFIG = {
 
     # ✅ Trade Requirements
-    "min_score_for_trade": 4.5,
+    "min_score_for_trade": 6.0,
     "sl_pips": 50,
     "tp_pips": 100,
     "delay_seconds": 60 * 15,  # 15-minute loop

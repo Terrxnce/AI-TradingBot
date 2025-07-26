@@ -16,7 +16,7 @@ from decision_engine import evaluate_trade_decision, calculate_dynamic_sl_tp, bu
 from broker_interface import initialize_mt5, shutdown_mt5, place_trade
 from config import CONFIG
 from trailing_stop import apply_trailing_stop
-from position_manager import check_for_partial_close
+from position_manager import check_for_partial_close, close_trades_at_4pm
 from risk_guard import can_trade
 from trade_logger import log_trade
 from session_utils import detect_session
@@ -130,6 +130,9 @@ def run_bot():
 
             for sym in trade_counter:
                 trade_counter[sym] = [t for t in trade_counter[sym] if (now - t).total_seconds() < 3600]
+
+            # Check for 4:00 PM auto-close
+            close_trades_at_4pm()
 
             for symbol in SYMBOLS:
                 print(f"\n⏳ Analyzing {symbol}...")
