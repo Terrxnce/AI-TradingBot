@@ -6,6 +6,7 @@ from decision_engine import should_override_soft_limit
 from config import CONFIG, FTMO_PARAMS
 
 cooldown_file_path = "pnl_cooldown_state.json"
+loss_block_file_path = "loss_block_state.json"
 
 def get_today_midnight():
     now = datetime.now()
@@ -130,6 +131,58 @@ def is_pnl_cooldown_active(tech_score):
 
     return False
 
+def load_loss_block_state():
+    """Load the current loss block state from JSON file."""
+    try:
+        if os.path.exists(loss_block_file_path):
+            with open(loss_block_file_path, "r") as f:
+                return json.load(f).get("block_active", False)
+        return False
+    except Exception as e:
+        print(f"⚠️ Error loading loss block state: {e}")
+        return False
+
+
+def set_loss_block_state(active):
+    """Set the loss block state and save to JSON file."""
+    try:
+        with open(loss_block_file_path, "w") as f:
+            json.dump({"block_active": active}, f)
+        print(f"📝 Loss block state set to: {active}")
+    except Exception as e:
+        print(f"❌ Error saving loss block state: {e}")
+
+
+def check_pnl_drawdown_block():
+    """
+    Check if trading should be blocked due to -1% unrealized PnL drawdown.
+    Returns True if trading should be blocked, False if allowed.
+    """
+    balance = get_balance()
+    floating_pnl = get_floating_pnl()
+    pnl_threshold = -balance * 0.01  # -1% threshold
+    
+    block_active = load_loss_block_state()
+    
+    # If we're currently in block mode
+    if block_active:
+        if floating_pnl > 0:
+            print("✅ Recovery detected: Floating PnL > 0. Resuming trades.")
+            set_loss_block_state(False)
+            return False  # Allow trading
+        else:
+            print(f"🧊 Trade frozen — still recovering from drawdown. Current PnL: ${floating_pnl:.2f}")
+            return True  # Block trading
+    
+    # If we're not in block mode, check if we should enter it
+    if floating_pnl < pnl_threshold:
+        print(f"🚫 Unrealized PnL below -1% threshold: ${floating_pnl:.2f} < ${pnl_threshold:.2f}")
+        print("🚫 Entered drawdown block mode - no new trades until recovery.")
+        set_loss_block_state(True)
+        return True  # Block trading
+    
+    return False  # Allow trading
+
 def can_trade(ta_signals=None, ai_response_raw=None, call_ai_func=None, tech_score=0):
     max_daily_loss = FTMO_PARAMS["max_daily_loss_pct"] * FTMO_PARAMS["initial_balance"]
     max_total_loss = FTMO_PARAMS["max_total_loss_pct"] * FTMO_PARAMS["initial_balance"]
@@ -145,6 +198,10 @@ def can_trade(ta_signals=None, ai_response_raw=None, call_ai_func=None, tech_sco
 
     print(f"🔒 [RISK CHECK] Closed PnL: {closed_today:.2f} | Floating: {floating:.2f} | Daily Loss: {daily_loss:.2f}")
     print(f"🔒 [RISK CHECK] Equity: {equity:.2f} | Total Loss: {total_loss:.2f} | Balance: {balance:.2f}")
+
+    # Check for -1% PnL drawdown block (Feature 3 & 4)
+    if check_pnl_drawdown_block():
+        return False
 
     if is_pnl_cooldown_active(tech_score):
         return False
