@@ -14,7 +14,8 @@ from get_candles import get_latest_candle_data
 from strategy_engine import analyze_structure
 from decision_engine import evaluate_trade_decision, calculate_dynamic_sl_tp, build_ai_prompt
 from broker_interface import initialize_mt5, shutdown_mt5, place_trade
-from config import CONFIG
+import importlib
+import config
 from trailing_stop import apply_trailing_stop
 from position_manager import check_for_partial_close, close_trades_at_4pm
 from risk_guard import can_trade
@@ -28,6 +29,15 @@ import json
 
 from datetime import time as dt_time
 
+def reload_config():
+    """Dynamically reload configuration from config.py"""
+    try:
+        importlib.reload(config)
+        return config.CONFIG
+    except Exception as e:
+        print(f"⚠️ Failed to reload config: {e}")
+        return config.CONFIG
+
 # === Settings ===
 SYMBOLS = sys.argv[1:]
 if not SYMBOLS:
@@ -35,8 +45,10 @@ if not SYMBOLS:
     sys.exit(1)
 
 TIMEFRAME = mt5.TIMEFRAME_M15
-DELAY_SECONDS = CONFIG.get("delay_seconds", 60 * 15)
-LOT_SIZE = CONFIG.get("lot_size", 1.0)
+
+def get_current_config():
+    """Get current configuration (reloaded each time)"""
+    return reload_config()
 
 def is_pm_session():
     now = datetime.now().time()
@@ -132,6 +144,10 @@ def run_bot():
 
     try:
         while True:
+            # Reload configuration at the start of each loop
+            current_config = get_current_config()
+            DELAY_SECONDS = current_config.get("delay_seconds", 60 * 15)
+            
             if not mt5.terminal_info() or not mt5.version():
                 print("⚠️ MT5 appears disconnected. Reinitializing...")
                 shutdown_mt5()
