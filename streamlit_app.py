@@ -1,3 +1,4 @@
+# ===== UPDATED IMPORTS =====
 import streamlit as st
 import pandas as pd
 import json
@@ -65,28 +66,93 @@ def match_ai_decision_with_trade(ai_row, trade_df, tolerance_minutes=5):
             return trade
     return None
 
+# === NEW: Calculate Top-Level Performance Metrics ===
+def calculate_performance_metrics(df, trade_df=None):
+    """Calculate key performance metrics for the dashboard header"""
+    metrics = {
+        'total_decisions': len(df),
+        'total_executed': 0,
+        'win_rate': 0.0,
+        'avg_tech_score': 0.0,
+        'avg_ai_confidence': 0.0,
+        'skipped_blocked': 0,
+        'technical_overrides': 0
+    }
+    
+    if df.empty:
+        return metrics
+    
+    # Basic counts
+    metrics['total_executed'] = len(df[df.get('executed', False) == True])
+    metrics['skipped_blocked'] = len(df[(df.get('executed', False) == False) & (df.get('final_direction', df.get('direction', 'HOLD')) != 'HOLD')])
+    metrics['technical_overrides'] = len(df[df.get('ai_override', False) == True])
+    
+    # Average scores
+    tech_scores = pd.to_numeric(df.get('technical_score', []), errors='coerce').dropna()
+    if not tech_scores.empty:
+        metrics['avg_tech_score'] = tech_scores.mean()
+    
+    # AI Confidence (check both new and legacy fields)
+    ai_conf = pd.to_numeric(df.get('ai_confidence', []), errors='coerce').dropna()
+    if ai_conf.empty:
+        ai_conf = pd.to_numeric(df.get('confidence', []), errors='coerce').dropna()
+    if not ai_conf.empty:
+        metrics['avg_ai_confidence'] = ai_conf.mean()
+    
+    # Win rate calculation (if trade_df is available)
+    if trade_df is not None and not trade_df.empty and metrics['total_executed'] > 0:
+        profitable_trades = len(trade_df[trade_df['profit'] > 0])
+        metrics['win_rate'] = (profitable_trades / len(trade_df)) * 100 if len(trade_df) > 0 else 0
+    
+    return metrics
+
+# === NEW: Enhanced AI Decision Display Logic ===
+def format_ai_decision_display(ai_decision, final_direction, ai_override=False):
+    """Format AI decision display with proper handling of missing/nan values"""
+    
+    # Handle AI Decision
+    if pd.isna(ai_decision) or str(ai_decision).lower() in ['nan', 'none', '']:
+        ai_decision_text = "Not Available"
+    else:
+        ai_decision_text = str(ai_decision).upper()
+    
+    # Handle Final Decision
+    if pd.isna(final_direction) or str(final_direction).lower() in ['nan', 'none', '']:
+        final_direction_text = "HOLD"
+    else:
+        final_direction_text = str(final_direction).upper()
+    
+    # Format display based on override status
+    if ai_override:
+        return f"AI Decision: {ai_decision_text} → Final Decision: {final_direction_text} (Technical Override)"
+    else:
+        if ai_decision_text == "Not Available":
+            return f"AI Decision: {ai_decision_text} → Final Decision: {final_direction_text}"
+        else:
+            return f"Final Decision: {final_direction_text}" if ai_decision_text == final_direction_text else f"AI Decision: {ai_decision_text} → Final Decision: {final_direction_text}"
+
 # === UPDATED: Enhanced Table Display Functions ===
 def format_table_data(df, trade_df=None):
     """Format the dataframe for clean display with trade matching and override handling"""
     display_df = df.copy()
     
-    # Ensure all required columns exist with defaults
+    # Ensure all required columns exist with defaults and N/A fallbacks
     required_columns = {
         'symbol': 'N/A',
         'timestamp': pd.NaT,
-        'ai_decision': 'HOLD',  # Original AI decision
-        'final_direction': None,  # Final executed direction
-        'direction': 'HOLD',  # Fallback for legacy data
+        'ai_decision': 'HOLD',
+        'final_direction': None,
+        'direction': 'HOLD',
         'confidence': 0,
-        'ai_confidence': None,  # New field for AI confidence
-        'technical_score': None,  # New field for technical score
-        'ema_trend': None,  # New field for EMA trend
+        'ai_confidence': None,
+        'technical_score': None,
+        'ema_trend': None,
         'sl': 'N/A',
         'tp': 'N/A',
         'reasoning': 'No reasoning provided',
-        'ai_reasoning': None,  # New field for AI reasoning
+        'ai_reasoning': None,
         'risk_note': 'No risk note provided',
-        'ai_risk_note': None,  # New field for AI risk note
+        'ai_risk_note': None,
         'executed': False,
         'ai_override': False,
         'ai_override_reason': None
@@ -95,6 +161,13 @@ def format_table_data(df, trade_df=None):
     for col, default_val in required_columns.items():
         if col not in display_df.columns:
             display_df[col] = default_val
+    
+    # === NEW: Apply N/A fallbacks for all None/NaN values ===
+    string_columns = ['symbol', 'ema_trend', 'sl', 'tp', 'reasoning', 'ai_reasoning', 'risk_note', 'ai_risk_note', 'ai_override_reason']
+    for col in string_columns:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].fillna('N/A')
+            display_df[col] = display_df[col].replace(['', 'nan', 'None'], 'N/A')
     
     # === NEW: Use final_direction if available, else fallback to ai_decision ===
     display_df['direction'] = display_df.get('final_direction', display_df.get('ai_decision', display_df.get('direction', 'HOLD')))
@@ -105,9 +178,13 @@ def format_table_data(df, trade_df=None):
     # === NEW: Display override clearly ===
     display_df['ai_override'] = display_df.get('ai_override', False)
     
-    # === NEW: Simplified column to display override source (UI tag) ===
-    display_df['override_info'] = display_df.apply(
-        lambda row: '🔄 Technical Override' if row.get('ai_override', False) else '✅ AI Decision',
+    # === NEW: Enhanced AI Decision Display ===
+    display_df['decision_display'] = display_df.apply(
+        lambda row: format_ai_decision_display(
+            row.get('ai_decision'),
+            row.get('final_direction', row.get('direction')),
+            row.get('ai_override', False)
+        ),
         axis=1
     )
     
@@ -129,11 +206,13 @@ def format_table_data(df, trade_df=None):
                 if ai_decision in ['HOLD', 'MISSING', 'N/A', ''] or pd.isna(row.get('ai_decision')):
                     display_df.loc[idx, 'ai_override'] = True
                     display_df.loc[idx, 'ai_override_reason'] = f"Technical override: AI suggested {ai_decision}, executed {trade_direction}"
-                    display_df.loc[idx, 'direction'] = trade_direction  # Use actual trade direction
-                    display_df.loc[idx, 'override_info'] = '🔄 Technical Override'
-                    st.success(f"🔄 Override detected for {row['symbol']}: AI={ai_decision} → Executed={trade_direction}")
+                    display_df.loc[idx, 'direction'] = trade_direction
+                    # Update decision display for override
+                    display_df.loc[idx, 'decision_display'] = format_ai_decision_display(
+                        ai_decision, trade_direction, True
+                    )
                 
-                # Store trade details for potential SL/TP extraction
+                # Store trade details
                 display_df.loc[idx, 'trade_price'] = executed_trade.get('price', 'N/A')
                 display_df.loc[idx, 'trade_volume'] = executed_trade.get('volume', 'N/A')
                 display_df.loc[idx, 'trade_profit'] = executed_trade.get('profit', 'N/A')
@@ -141,43 +220,131 @@ def format_table_data(df, trade_df=None):
     # Clean up data formatting
     display_df['executed'] = display_df['executed'].fillna(False).astype(bool)
     
-    # **Enhanced SL/TP formatting based on direction and execution**
+    # **Enhanced SL/TP formatting with N/A fallbacks**
     def format_sl_tp(row, field):
-        """Format SL/TP based on trade direction and execution status"""
+        """Format SL/TP with N/A fallbacks for None values"""
         value = row[field]
         direction = str(row['direction']).upper()
         executed = row['executed']
         
         # If value exists and is not N/A
-        if pd.notna(value) and str(value).upper() not in ['N/A', 'NAN', '']:
+        if pd.notna(value) and str(value).upper() not in ['N/A', 'NAN', '', 'NONE']:
             return str(value)
         
         # If direction is HOLD
         if direction == 'HOLD':
-            return "Not Applicable (HOLD decision)"
+            return "N/A"
         
-        # If trade was executed but no SL/TP in AI log, could pull from trade system
+        # If trade was executed but no SL/TP in AI log
         if executed and direction in ['BUY', 'SELL']:
-            return f"Check trade system ({direction} executed)"
+            return "N/A"
         
-        # If direction is missing but executed is False
-        if direction in ['N/A', 'MISSING'] and not executed:
-            return "Not Applicable (No execution)"
-        
-        # If direction exists but no SL/TP
-        if direction in ['BUY', 'SELL']:
-            return f"Not Set ({direction} decision)"
-        
+        # Default fallback
         return "N/A"
     
     display_df['sl'] = display_df.apply(lambda row: format_sl_tp(row, 'sl'), axis=1)
     display_df['tp'] = display_df.apply(lambda row: format_sl_tp(row, 'tp'), axis=1)
     
-    # **Enhanced Direction formatting**
+    # **Enhanced Direction formatting with N/A fallbacks**
     display_df['direction'] = display_df['direction'].fillna('HOLD').astype(str)
-    display_df['direction'] = display_df['direction'].replace({'N/A': 'HOLD', 'nan': 'HOLD'})
+    display_df['direction'] = display_df['direction'].replace({'N/A': 'HOLD', 'nan': 'HOLD', 'None': 'HOLD'})
     
     return display_df
+
+# === NEW: Trade Performance Metrics Header Component ===
+def display_performance_header(df, trade_df=None):
+    """Display comprehensive performance metrics at the top of dashboard"""
+    st.header("📊 Trade Performance Overview")
+    
+    metrics = calculate_performance_metrics(df, trade_df)
+    
+    # Main metrics row
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    
+    with col1:
+        st.metric(
+            "Total Executed Trades", 
+            metrics['total_executed'],
+            help="Number of trades that were actually executed in the market"
+        )
+    
+    with col2:
+        if metrics['win_rate'] > 0:
+            st.metric(
+                "Win Rate", 
+                f"{metrics['win_rate']:.1f}%",
+                help="Percentage of profitable trades (requires MT5 data)"
+            )
+        else:
+            st.metric(
+                "Win Rate", 
+                "N/A",
+                help="Win rate calculation requires MT5 trade data"
+            )
+    
+    with col3:
+        st.metric(
+            "Avg Tech Score", 
+            f"{metrics['avg_tech_score']:.1f}" if metrics['avg_tech_score'] > 0 else "N/A",
+            help="Average technical analysis score across all decisions"
+        )
+    
+    with col4:
+        st.metric(
+            "Avg AI Confidence", 
+            f"{metrics['avg_ai_confidence']:.1f}/10" if metrics['avg_ai_confidence'] > 0 else "N/A",
+            help="Average AI confidence level across all decisions"
+        )
+    
+    with col5:
+        st.metric(
+            "Skipped/Blocked Trades", 
+            metrics['skipped_blocked'],
+            help="Trades that had BUY/SELL signals but were not executed"
+        )
+    
+    with col6:
+        st.metric(
+            "Technical Overrides", 
+            metrics['technical_overrides'],
+            help="Cases where technical analysis overrode AI decisions"
+        )
+    
+    # Additional insights row
+    if metrics['total_decisions'] > 0:
+        st.markdown("---")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            execution_rate = (metrics['total_executed'] / metrics['total_decisions']) * 100
+            st.metric(
+                "Execution Rate",
+                f"{execution_rate:.1f}%",
+                help="Percentage of decisions that resulted in executed trades"
+            )
+        
+        with col2:
+            hold_decisions = metrics['total_decisions'] - metrics['total_executed'] - metrics['skipped_blocked']
+            st.metric(
+                "HOLD Decisions",
+                hold_decisions,
+                help="Number of times the system decided to hold and not trade"
+            )
+        
+        with col3:
+            if metrics['technical_overrides'] > 0:
+                override_rate = (metrics['technical_overrides'] / metrics['total_decisions']) * 100
+                st.metric(
+                    "Override Rate",
+                    f"{override_rate:.1f}%",
+                    help="Percentage of decisions where technical analysis overrode AI"
+                )
+            else:
+                st.metric(
+                    "AI Agreement",
+                    "100%",
+                    help="AI and technical analysis are in full agreement"
+                )
 
 def display_enhanced_ai_table(filtered_df, trade_df=None):
     """Enhanced table display for AI decisions with trade matching and override display"""
@@ -189,32 +356,31 @@ def display_enhanced_ai_table(filtered_df, trade_df=None):
     # Format the data with trade matching
     display_df = format_table_data(filtered_df, trade_df)
     
-    # === Additional Filters for Enhanced Table ===
-    st.sidebar.markdown("### 📊 Enhanced Filters")
-    
-    # Execution Status Filter
-    execution_options = ['All', 'Executed', 'Not Executed']
-    selected_execution = st.sidebar.selectbox(
-        "Execution Status",
-        execution_options,
-        help="Filter by whether the trade was executed (now checks actual trades)"
-    )
-    
-    # AI Override Filter
-    override_options = ['All', 'Override Cases', 'AI Decisions']
-    selected_override = st.sidebar.selectbox(
-        "Decision Type",
-        override_options,
-        help="Show cases where AI decisions were overridden by technical signals"
-    )
-    
-    # Direction Filter
-    directions = ['All'] + sorted([d for d in display_df['direction'].unique() if pd.notna(d)])
-    selected_direction = st.sidebar.selectbox(
-        "Trade Direction",
-        directions,
-        help="Filter by trade direction. Shows actual executed direction when available."
-    )
+    # === NEW: Collapsible Enhanced Filters ===
+    with st.sidebar.expander("📊 Enhanced Filters", expanded=False):
+        # Execution Status Filter
+        execution_options = ['All', 'Executed', 'Not Executed']
+        selected_execution = st.selectbox(
+            "Execution Status",
+            execution_options,
+            help="Filter by whether the trade was executed (checks actual trades)"
+        )
+        
+        # AI Override Filter
+        override_options = ['All', 'Override Cases', 'AI Decisions']
+        selected_override = st.selectbox(
+            "Decision Type",
+            override_options,
+            help="Show cases where AI decisions were overridden by technical signals"
+        )
+        
+        # Direction Filter
+        directions = ['All'] + sorted([d for d in display_df['direction'].unique() if pd.notna(d)])
+        selected_direction = st.selectbox(
+            "Trade Direction",
+            directions,
+            help="Filter by trade direction. Shows actual executed direction when available."
+        )
     
     # Apply Additional Filters
     if selected_execution == 'Executed':
@@ -234,31 +400,27 @@ def display_enhanced_ai_table(filtered_df, trade_df=None):
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
-        st.metric("Total Decisions", len(display_df))
+        st.metric("Filtered Decisions", len(display_df))
     
     with col2:
         executed_count = len(display_df[display_df['executed'] == True])
-        st.metric("Executed Trades", executed_count)
+        st.metric("Executed", executed_count)
     
     with col3:
         hold_count = len(display_df[display_df['direction'] == 'HOLD'])
-        st.metric("HOLD Decisions", hold_count)
+        st.metric("HOLD", hold_count)
     
     with col4:
         override_count = len(display_df[display_df['ai_override'] == True])
-        if override_count > 0:
-            st.metric("🔄 Technical Overrides", override_count)
-        else:
-            st.metric("Data Quality", "✅ Good")
+        st.metric("Overrides", override_count)
     
     with col5:
         if len(display_df) > 0:
-            # Use ai_confidence if available, else fall back to confidence
             confidence_col = 'ai_confidence' if 'ai_confidence' in display_df.columns and display_df['ai_confidence'].notna().any() else 'confidence'
             avg_confidence = pd.to_numeric(display_df[confidence_col], errors='coerce').mean()
-            st.metric("Avg AI Confidence", f"{avg_confidence:.1f}" if not pd.isna(avg_confidence) else "N/A")
+            st.metric("Avg Confidence", f"{avg_confidence:.1f}" if not pd.isna(avg_confidence) else "N/A")
         else:
-            st.metric("Avg AI Confidence", "N/A")
+            st.metric("Avg Confidence", "N/A")
     
     st.markdown("---")
     
@@ -277,28 +439,26 @@ def display_enhanced_ai_table(filtered_df, trade_df=None):
     for idx, row in display_df.iterrows():
         with st.container():
             # Create header for each entry
-            st.markdown(f"### {row['symbol']} – {pd.to_datetime(row['timestamp']).strftime('%Y-%m-%d %H:%M:%S') if pd.notna(row['timestamp']) else 'Unknown Time'}")
+            timestamp_str = pd.to_datetime(row['timestamp']).strftime('%Y-%m-%d %H:%M:%S') if pd.notna(row['timestamp']) else 'Unknown Time'
+            st.markdown(f"### {row['symbol']} – {timestamp_str}")
             
-            # === NEW: Display override information clearly ===
+            # === NEW: Enhanced Decision Display ===
+            decision_display = row.get('decision_display', 'N/A')
             if row.get('ai_override', False):
-                # Show AI decision vs final decision for overrides
-                ai_decision = row.get('ai_decision', 'HOLD')
-                final_direction = row['direction']
-                st.markdown(
-                    f"🧠 **AI Decision:** {ai_decision} → **Final Decision:** {final_direction} {row['override_info']}"
-                )
+                st.markdown(f"🔄 **{decision_display}**")
             else:
-                # Show normal AI decision
                 direction = row['direction']
                 emoji = "🟢" if direction == "BUY" else "🔴" if direction == "SELL" else "🟡"
-                st.markdown(f"{emoji} **{direction}** – {row['override_info']}")
+                st.markdown(f"{emoji} **{decision_display}**")
             
-            # === NEW: Display key metrics in organized format ===
+            # === NEW: Display key metrics with N/A handling ===
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.text(f"SL: {row.get('sl', 'N/A')}")
-                st.text(f"TP: {row.get('tp', 'N/A')}")
+                sl_val = row.get('sl', 'N/A')
+                tp_val = row.get('tp', 'N/A')
+                st.text(f"SL: {sl_val}")
+                st.text(f"TP: {tp_val}")
                 st.text(f"Executed: {'✅ Yes' if row['executed'] else '❌ No'}")
             
             with col2:
@@ -309,29 +469,42 @@ def display_enhanced_ai_table(filtered_df, trade_df=None):
             
             with col3:
                 ai_confidence = row.get('ai_confidence', row.get('confidence', 'N/A'))
-                st.text(f"AI Confidence: {ai_confidence}/10")
-                if 'trade_profit' in row and pd.notna(row['trade_profit']):
+                if ai_confidence != 'N/A' and pd.notna(ai_confidence):
+                    st.text(f"AI Confidence: {ai_confidence}/10")
+                else:
+                    st.text(f"AI Confidence: N/A")
+                
+                if 'trade_profit' in row and pd.notna(row['trade_profit']) and row['trade_profit'] != 'N/A':
                     profit_color = "🟢" if float(row['trade_profit']) > 0 else "🔴"
                     st.text(f"P&L: {profit_color} {row['trade_profit']}")
             
-            # === NEW: Expandable sections for detailed information ===
+            # === NEW: Expandable sections with N/A handling ===
             col1, col2 = st.columns(2)
             
             with col1:
                 with st.expander("📖 AI Reasoning"):
-                    reasoning = row.get('ai_reasoning', row.get('reasoning', 'No reasoning provided'))
-                    st.write(str(reasoning))
+                    reasoning = row.get('ai_reasoning', row.get('reasoning', 'N/A'))
+                    if reasoning == 'N/A' or pd.isna(reasoning) or str(reasoning).strip() == '':
+                        st.write("No reasoning provided")
+                    else:
+                        st.write(str(reasoning))
             
             with col2:
                 with st.expander("⚠️ Risk Assessment"):
-                    risk_note = row.get('ai_risk_note', row.get('risk_note', 'No risk assessment provided'))
-                    st.write(str(risk_note))
+                    risk_note = row.get('ai_risk_note', row.get('risk_note', 'N/A'))
+                    if risk_note == 'N/A' or pd.isna(risk_note) or str(risk_note).strip() == '':
+                        st.write("No risk assessment provided")
+                    else:
+                        st.write(str(risk_note))
             
             # Show override details if applicable
-            if row.get('ai_override', False) and pd.notna(row.get('ai_override_reason')):
+            if row.get('ai_override', False):
                 with st.expander("🔄 Override Details"):
-                    st.warning(str(row['ai_override_reason']))
-                    if 'trade_price' in row and pd.notna(row['trade_price']):
+                    override_reason = row.get('ai_override_reason', 'N/A')
+                    if override_reason != 'N/A' and pd.notna(override_reason):
+                        st.warning(str(override_reason))
+                    
+                    if 'trade_price' in row and pd.notna(row['trade_price']) and row['trade_price'] != 'N/A':
                         st.write("**Executed Trade Details:**")
                         st.write(f"• Price: {row['trade_price']}")
                         st.write(f"• Volume: {row['trade_volume']}")
@@ -345,7 +518,6 @@ def display_enhanced_ai_table(filtered_df, trade_df=None):
     col1, col2 = st.columns(2)
     
     with col1:
-        # CSV Export
         csv_data = display_df.to_csv(index=False)
         st.download_button(
             label="📊 Download as CSV",
@@ -356,7 +528,6 @@ def display_enhanced_ai_table(filtered_df, trade_df=None):
         )
     
     with col2:
-        # JSON Export
         json_data = display_df.to_json(orient='records', date_format='iso', indent=2)
         st.download_button(
             label="📋 Download as JSON",
@@ -396,7 +567,6 @@ else:
 
 # === AI Reasoning Log ===
 st.markdown("---")
-st.header("🧠 AI Reasoning Log")
 
 # Load and process AI log data
 log_df = load_ai_log()
@@ -442,79 +612,84 @@ else:
     st.error("❌ 'timestamp' column missing in AI log.")
     st.stop()
 
-# **Debug timestamp information**
-st.sidebar.markdown("### 📅 Date Info")
-st.sidebar.write(f"**Total entries:** {len(log_df)}")
-st.sidebar.write(f"**Date range in data:**")
-st.sidebar.write(f"From: {log_df['timestamp'].min().strftime('%Y-%m-%d %H:%M:%S')}")
-st.sidebar.write(f"To: {log_df['timestamp'].max().strftime('%Y-%m-%d %H:%M:%S')}")
+# === NEW: Display Performance Metrics Header ===
+display_performance_header(log_df, trade_df)
+st.markdown("---")
 
-# Show entries per date for debugging
-date_counts = log_df['timestamp'].dt.date.value_counts().sort_index()
-st.sidebar.write("**Entries per date:**")
-for date, count in date_counts.items():
-    st.sidebar.write(f"  {date}: {count} entries")
-
-# === Sidebar Filters ===
-st.sidebar.header("🔍 Basic Filters")
-
-# Symbol filter
-symbols = sorted(log_df["symbol"].dropna().unique())
-selected_symbols = st.sidebar.multiselect("Symbol", options=symbols, default=symbols)
-
-# **Improved date range handling**
-# Convert to local timezone for date picker (removes timezone info for date comparison)
-log_df_local = log_df.copy()
-log_df_local["timestamp_local"] = log_df_local["timestamp"].dt.tz_convert(None)
-
-min_date = log_df_local["timestamp_local"].min().date()
-max_date = log_df_local["timestamp_local"].max().date()
-
-# **More flexible date range picker**
-st.sidebar.write(f"Available date range: {min_date} to {max_date}")
-
-# Force max_date to be at least today if data exists for today
-today = date.today()
-if max_date < today and len(log_df_local[log_df_local["timestamp_local"].dt.date == today]) > 0:
-    max_date = today
-
-date_range = st.sidebar.date_input(
-    "Date Range", 
-    value=(min_date, max_date), 
-    min_value=min_date, 
-    max_value=max_date,
-    help=f"Select dates between {min_date} and {max_date}"
-)
-
-# **Handle both single date and date range**
-if isinstance(date_range, tuple) and len(date_range) == 2:
-    start_date, end_date = date_range
-elif isinstance(date_range, tuple) and len(date_range) == 1:
-    start_date = end_date = date_range[0]
-else:
-    start_date = end_date = date_range
-
-# **Convert confidence to numeric once**
-log_df["confidence"] = pd.to_numeric(log_df["confidence"], errors="coerce")
-conf_values = log_df["confidence"].dropna()
-
-if not conf_values.empty:
-    min_conf = int(conf_values.min())
-    max_conf = int(conf_values.max())
+# === NEW: Collapsible Sidebar Filters ===
+with st.sidebar.expander("🔍 Basic Filters", expanded=True):
+    # **Debug timestamp information**
+    st.markdown("### 📅 Date Info")
+    st.write(f"**Total entries:** {len(log_df)}")
+    st.write(f"**Date range in data:**")
+    st.write(f"From: {log_df['timestamp'].min().strftime('%Y-%m-%d %H:%M:%S')}")
+    st.write(f"To: {log_df['timestamp'].max().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    st.sidebar.write(f"**Confidence range:** {min_conf} to {max_conf}")
+    # Show entries per date for debugging
+    date_counts = log_df['timestamp'].dt.date.value_counts().sort_index()
+    st.write("**Entries per date:**")
+    for date, count in date_counts.items():
+        st.write(f"  {date}: {count} entries")
     
-    if min_conf < max_conf:
-        conf_filter = st.sidebar.slider("Confidence (min)", min_conf, max_conf, min_conf)
+    st.markdown("---")
+    
+    # Symbol filter
+    symbols = sorted(log_df["symbol"].dropna().unique())
+    selected_symbols = st.multiselect("Symbol", options=symbols, default=symbols)
+    
+    # **Improved date range handling**
+    # Convert to local timezone for date picker (removes timezone info for date comparison)
+    log_df_local = log_df.copy()
+    log_df_local["timestamp_local"] = log_df_local["timestamp"].dt.tz_convert(None)
+    
+    min_date = log_df_local["timestamp_local"].min().date()
+    max_date = log_df_local["timestamp_local"].max().date()
+    
+    # **More flexible date range picker**
+    st.write(f"Available date range: {min_date} to {max_date}")
+    
+    # Force max_date to be at least today if data exists for today
+    today = date.today()
+    if max_date < today and len(log_df_local[log_df_local["timestamp_local"].dt.date == today]) > 0:
+        max_date = today
+    
+    date_range = st.date_input(
+        "Date Range", 
+        value=(min_date, max_date), 
+        min_value=min_date, 
+        max_value=max_date,
+        help=f"Select dates between {min_date} and {max_date}"
+    )
+    
+    # **Handle both single date and date range**
+    if isinstance(date_range, tuple) and len(date_range) == 2:
+        start_date, end_date = date_range
+    elif isinstance(date_range, tuple) and len(date_range) == 1:
+        start_date = end_date = date_range[0]
     else:
-        st.sidebar.markdown(f"Only one confidence level found: **{min_conf}**")
-        conf_filter = min_conf
-else:
-    st.sidebar.warning("No valid confidence values found")
-    conf_filter = 0
-
-# Search box
-search_term = st.sidebar.text_input("Search (reasoning or risk note)").lower()
+        start_date = end_date = date_range
+    
+    # **Convert confidence to numeric once**
+    log_df["confidence"] = pd.to_numeric(log_df["confidence"], errors="coerce")
+    conf_values = log_df["confidence"].dropna()
+    
+    if not conf_values.empty:
+        min_conf = int(conf_values.min())
+        max_conf = int(conf_values.max())
+        
+        st.write(f"**Confidence range:** {min_conf} to {max_conf}")
+        
+        if min_conf < max_conf:
+            conf_filter = st.slider("Confidence (min)", min_conf, max_conf, min_conf)
+        else:
+            st.markdown(f"Only one confidence level found: **{min_conf}**")
+            conf_filter = min_conf
+    else:
+        st.warning("No valid confidence values found")
+        conf_filter = 0
+    
+    # Search box
+    search_term = st.text_input("Search (reasoning or risk note)").lower()
 
 # === Apply Basic Filters ===
 # **Use local timezone for date filtering**
@@ -568,4 +743,4 @@ else:
     )
 
 st.markdown("---")
-st.caption("Built by Divine Earnings | Phase 1.7 – Enhanced Override Display | Now with Clear Technical Overrides 🔄")
+st.caption("Built by Divine Earnings | Phase 2.0 – Enhanced Dashboard with Performance Metrics | Complete Trade Analytics 📊")
