@@ -22,6 +22,7 @@ from trade_logger import log_trade
 from session_utils import detect_session
 from news_guard import get_macro_sentiment
 from profit_guard import check_and_lock_profits
+import json 
 
 
 
@@ -67,6 +68,25 @@ def parse_ai_sentiment(raw_response):
     elif current_section == "risk_note":
         parsed["risk_note"] = " ".join(buffer).strip()
     return parsed
+
+def log_ai_decision(symbol, ai_data, timestamp=None):
+    """
+    Append AI decision to ai_decision_log.jsonl
+    """
+    entry = {
+        "timestamp": timestamp or datetime.now().isoformat(),
+        "symbol": symbol,
+        "confidence": ai_data.get("confidence", "N/A"),
+        "reasoning": ai_data.get("reasoning", ""),
+        "risk_note": ai_data.get("risk_note", "")
+    }
+
+    try:
+        with open("ai_decision_log.jsonl", "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        print(f"❌ Failed to write AI decision log: {e}")
+
 
 # === AI Sentiment ===
 def get_ai_sentiment(prompt):
@@ -114,10 +134,8 @@ def run_bot():
             for symbol in SYMBOLS:
                 print(f"\n⏳ Analyzing {symbol}...")
 
-                # ✅ NEW: Secure profits before new trades are considered
                 check_and_lock_profits()
 
-                # USD asset restriction
                 if CONFIG.get("restrict_usd_to_am", False):
                     keywords = CONFIG.get("usd_related_keywords", [])
                     if any(k in symbol.upper() for k in keywords):
@@ -166,7 +184,6 @@ def run_bot():
                 decision = evaluate_trade_decision(ta_signals, ai_sentiment)
                 print(f"📈 Trade Decision: {decision}")
 
-                # Recalculate technical_score for risk_guard override
                 technical_score = 0.0
                 if ta_signals.get("bos") in ["bullish", "bearish"]:
                     technical_score += 2.0
@@ -192,7 +209,21 @@ def run_bot():
                     print(f"❌ Skipping {symbol_key}: 2-trade-per-hour limit reached.")
                     continue
 
-                if decision in ["BUY", "SELL"]:
+                ai_data = parse_ai_sentiment(ai_sentiment)
+                ema_trend = ta_signals.get("ema_trend", ta_signals.get("h1_trend", "N/A"))
+                ai_direction = decision
+                final_direction = ai_direction
+                execution_source = "AI"
+                override_reason = ""
+
+                if technical_score >= CONFIG["min_score_for_trade"] and ema_trend in ["bullish", "bearish"]:
+                    if ai_direction == "HOLD":
+                        final_direction = "BUY" if ema_trend == "bullish" else "SELL"
+                        execution_source = "technical_override"
+                        override_reason = f"Technical score {technical_score} overrode AI HOLD"
+
+                success = False
+                if final_direction in ["BUY", "SELL"]:
                     try:
                         if not mt5.terminal_info() or not mt5.version():
                             print("⚠️ Reinitializing MT5 before trade placement...")
@@ -201,19 +232,16 @@ def run_bot():
                             initialize_mt5()
 
                         price = candles_m15.iloc[-1]["close"]
-                        sl, tp = calculate_dynamic_sl_tp(price, decision, candles_m15)
+                        sl, tp = calculate_dynamic_sl_tp(price, final_direction, candles_m15)
                         lot_sizes = {k.upper(): v for k, v in CONFIG.get("LOT_SIZES", {}).items()}
                         lot = lot_sizes.get(symbol_key, CONFIG.get("lot_size", 1.0))
 
                         print(f"🧶 Resolved lot size for {symbol}: {lot}")
                         print(f"🎯 Dynamic SL: {sl} | TP: {tp} | Lot: {lot}")
 
-                        ai_data = parse_ai_sentiment(ai_sentiment)
-                        ema_trend = ta_signals.get("ema_trend", ta_signals.get("h1_trend", "N/A"))
-
                         success = place_trade(
                             symbol=symbol,
-                            action=decision,
+                            action=final_direction,
                             lot=lot,
                             sl=sl,
                             tp=tp,
@@ -225,11 +253,31 @@ def run_bot():
                         )
 
                         if success:
-                            log_trade(symbol, decision, lot, sl, tp, price, result="EXECUTED")
+                            log_trade(symbol, final_direction, lot, sl, tp, price, result="EXECUTED")
                             trade_counter[symbol_key].append(now)
+
                     except Exception as err:
                         print(f"❌ SL/TP or lot sizing error: {err}")
-                        log_trade(symbol, decision, lot, sl, tp, price, result=f"FAILED: {err}")
+                        log_trade(symbol, final_direction, lot, sl, tp, price, result=f"FAILED: {err}")
+
+                log_entry = {
+                    "timestamp": datetime.now().isoformat(),
+                    "symbol": symbol,
+                    "ai_decision": ai_direction,
+                    "ai_confidence": ai_data["confidence"],
+                    "ai_reasoning": ai_data["reasoning"],
+                    "ai_risk_note": ai_data["risk_note"],
+                    "technical_score": technical_score,
+                    "ema_trend": ema_trend,
+                    "final_direction": final_direction,
+                    "executed": success,
+                    "ai_override": final_direction != ai_direction,
+                    "override_reason": override_reason,
+                    "execution_source": execution_source
+                }
+
+                with open("ai_decision_log.jsonl", "a") as f:
+                    f.write(json.dumps(log_entry) + "\n")
 
             apply_trailing_stop(minutes=30, trail_pips=20)
             check_for_partial_close()
@@ -252,3 +300,4 @@ def run_bot():
 
 if __name__ == "__main__":
     run_bot()
+

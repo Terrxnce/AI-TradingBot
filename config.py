@@ -34,7 +34,7 @@ CONFIG = {
     "delay_seconds": 60 * 15,  # 15-minute loop
 
     # ✅ Symbol-Specific Lot Sizes
-    "lot_size": 1.0,
+    "lot_size": 1.25,
     "LOT_SIZES": {
         "XAUUSD": 0.01,
         "US500.cash": 3.5,
@@ -72,6 +72,8 @@ CONFIG = {
     # ✅ Cooldown Settings
     "pnl_drawdown_limit": -0.5,
     "cooldown_minutes_after_recovery": 15,
+    "global_profit_lock_cooldown_minutes": 0,
+
 
     # ✅ PM Filters
     "pm_session_start": 17,
@@ -80,7 +82,7 @@ CONFIG = {
 
     # ✅ USD Control (Trading Window + Filter)
     "usd_related_keywords": ["USD", "US500", "US30", "NAS100"],
-    "restrict_usd_to_am": True,
+    "restrict_usd_to_am": False,
     "allowed_trading_window": {
         "start_hour": 14,
         "end_hour": 16,

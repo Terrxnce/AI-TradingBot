@@ -1,12 +1,13 @@
 import MetaTrader5 as mt5
 from config import CONFIG
+from trade_state_tracker import mark_partial_closed
+
 
 def check_for_partial_close():
 
     if not mt5.terminal_info():
-        print("⚠️ MT5 not initialized. Skipping trailing SL.")
+        print("⚠️ MT5 not initialized. Skipping partial close.")
         return
-
 
     acc_info = mt5.account_info()
     if acc_info is None:
@@ -63,6 +64,9 @@ def check_for_partial_close():
                 })
                 if result_close.retcode == mt5.TRADE_RETCODE_DONE:
                     print(f"✅ Closed 50% of {symbol} @ {price}")
+                    
+                    # ✅ Mark this trade for trailing SL later
+                    mark_partial_closed(ticket)
 
                     DEFAULT_LOT = CONFIG["lot_size"]
                     CONFIG["LOT_SIZES"][symbol.upper()] = DEFAULT_LOT

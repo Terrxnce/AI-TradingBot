@@ -155,11 +155,11 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
 
     symbol = ta_signals.get("symbol", "").upper()
 
-    if pm_start <= current_hour < pm_end:
-        if any(keyword in symbol for keyword in usd_keywords):
-            if technical_score < min_pm_score:
-                print(f"🕔 PM Session: {symbol} blocked – score {technical_score}/8 below minimum {min_pm_score}")
-                return "HOLD"
+   #if pm_start <= current_hour < pm_end:
+   #    if any(keyword in symbol for keyword in usd_keywords):
+   #        if technical_score < min_pm_score:
+   #            print(f"🕔 PM Session: {symbol} blocked – score {technical_score}/8 below minimum {min_pm_score}")
+   #            return "HOLD"
 
     # === Override AI if technicals are very strong
     if technical_score >= 5 and direction:
