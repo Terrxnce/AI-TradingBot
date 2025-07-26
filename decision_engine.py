@@ -115,7 +115,7 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
     Technicals decide direction. AI must confirm unless technical score is very strong.
     AI response must be in structured format: ENTRY_DECISION, CONFIDENCE, etc.
     """
-    required_score = CONFIG.get("min_score_for_trade", 4.5)
+    required_score = CONFIG.get("min_score_for_trade", 6.0)
     technical_score = 0.0
 
     # Enforce H1/M15 trend agreement
@@ -144,6 +144,11 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
     print(f"📊 Technical Score: {round(technical_score, 2)} / 8.0")
     print("📉 EMA Trend:", trend)
 
+    #check if technical score meets minimum requirement
+    if technical_score < required_score:
+        print(f"⚠️ Technical score {technical_score}/8 is below required {required_score}, Skipping trade.")
+        return "HOLD"
+
     # === PM Session USD/US Asset Filter ===
     from datetime import datetime
     now = datetime.now()
@@ -162,10 +167,10 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
    #            return "HOLD"
 
     # === Override AI if technicals are very strong
-    if technical_score >= 5 and direction:
-        print("⚡ Strong technicals override AI.")
+    if technical_score >= required_score and direction:
+        print(f"⚡ Strong technicals (score: {technical_score}) override AI.")
         return direction
-
+    
     # === Parse structured AI response
     parsed = parse_ai_response(ai_response_raw)
     if parsed:

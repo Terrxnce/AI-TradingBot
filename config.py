@@ -28,7 +28,7 @@ FTMO_PARAMS = {
 CONFIG = {
 
     # ✅ Trade Requirements
-    "min_score_for_trade": 4.5,
+    "min_score_for_trade": 6,
     "sl_pips": 50,
     "tp_pips": 100,
     "delay_seconds": 60 * 15,  # 15-minute loop
@@ -82,7 +82,7 @@ CONFIG = {
 
     # ✅ USD Control (Trading Window + Filter)
     "usd_related_keywords": ["USD", "US500", "US30", "NAS100"],
-    "restrict_usd_to_am": False,
+    "restrict_usd_to_am": True,
     "allowed_trading_window": {
         "start_hour": 14,
         "end_hour": 16,
