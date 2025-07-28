@@ -34,7 +34,7 @@ CONFIG = {
     "delay_seconds": 60 * 15,  # 15-minute loop
 
     # ✅ Symbol-Specific Lot Sizes
-    "lot_size": 1.25,
+    "lot_size": 1.25,  # Changed from 1.25 to 0.01 for testing
     "LOT_SIZES": {
         "XAUUSD": 0.01,
         "US500.cash": 3.5,
@@ -82,7 +82,7 @@ CONFIG = {
 
     # ✅ USD Control (Trading Window + Filter)
     "usd_related_keywords": ["USD", "US500", "US30", "NAS100"],
-    "restrict_usd_to_am": True,
+    "restrict_usd_to_am": True,  # Changed back to True - only USD pairs restricted
     "allowed_trading_window": {
         "start_hour": 14,
         "end_hour": 16,

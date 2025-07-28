@@ -3,6 +3,9 @@ from datetime import datetime, timedelta
 import os
 import json
 from decision_engine import should_override_soft_limit
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'Data Files'))
 from config import CONFIG, FTMO_PARAMS
 
 cooldown_file_path = "pnl_cooldown_state.json"

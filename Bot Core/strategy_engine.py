@@ -26,6 +26,9 @@
 import pandas as pd
 import MetaTrader5 as mt5
 from datetime import datetime
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
 from config import CONFIG
 from session_utils import detect_session
 from impulse_detector import detect_impulsive_move

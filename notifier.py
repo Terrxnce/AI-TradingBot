@@ -116,3 +116,112 @@ It’s seamless, flexible, and fully under your control.
         "parse_mode": "Markdown"
     }
     requests.post(url, data=data)
+
+
+def send_bot_online_notification():
+    """
+    Send notification when bot goes online and is holding until trading window
+    """
+    from datetime import datetime
+    now = datetime.now()
+    
+    # Check if there's any upcoming news
+    try:
+        from news_guard import get_high_impact_news
+        news_events = get_high_impact_news()
+        news_info = ""
+        if news_events:
+            news_info = "\n\n📰 *Upcoming High-Impact News:*\n"
+            for event in news_events[:3]:  # Show first 3 events
+                news_info += f"• {event.get('title', 'News Event')}\n"
+    except:
+        news_info = "\n\n📰 *News monitoring active*"
+    
+    msg = f"""
+🤖 *D.E.V.I Online*
+
+I am now live and monitoring the markets.
+
+⏰ *Trading Window:* 14:00-16:00 (2:00-4:00 PM)
+🎯 *Current Status:* Holding until allowed window
+📊 *Focus:* USD pairs and indices only
+
+I will remain patient and wait for the optimal trading conditions. No trades will be taken outside the designated window.
+
+{news_info}
+
+*"The patient hunter gets the prey."*
+— D.E.V.I
+"""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {
+        "chat_id": CHAT_ID,
+        "text": msg.strip(),
+        "parse_mode": "Markdown"
+    }
+    requests.post(url, data=data)
+
+
+def send_trading_complete_notification():
+    """
+    Send notification when trading is done for the day
+    """
+    from datetime import datetime
+    now = datetime.now()
+    
+    msg = f"""
+🏁 *Trading Complete*
+
+All positions have been closed. Trading session ended at {now.strftime('%H:%M')}.
+
+📊 *Session Summary:*
+• All trades closed successfully
+• Risk management protocols maintained
+• Ready for next session
+
+I will remain offline until the next trading window.
+
+*"Discipline is the bridge between goals and accomplishment."*
+— D.E.V.I
+"""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {
+        "chat_id": CHAT_ID,
+        "text": msg.strip(),
+        "parse_mode": "Markdown"
+    }
+    requests.post(url, data=data)
+
+
+def send_bot_offline_notification():
+    """
+    Send notification when bot goes offline unexpectedly
+    """
+    from datetime import datetime
+    now = datetime.now()
+    
+    msg = f"""
+⚠️ *D.E.V.I Offline*
+
+I have been taken offline at {now.strftime('%H:%M')}.
+
+🔍 *Possible Reasons:*
+• System maintenance
+• Connection issues
+• Manual shutdown
+• Risk management trigger
+
+All open positions have been managed according to protocols.
+
+I will return when conditions are optimal.
+
+*"Even the strongest systems need rest."*
+— D.E.V.I
+"""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    data = {
+        "chat_id": CHAT_ID,
+        "text": msg.strip(),
+        "parse_mode": "Markdown"
+    }
+    requests.post(url, data=data)

@@ -1,4 +1,7 @@
 import MetaTrader5 as mt5
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
 from config import CONFIG  # Load SL/TP from config
 from notifier import send_trade_notification
 import time

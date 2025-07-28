@@ -1,0 +1,2 @@
+2025-07-27 16:27:57,007 - ERROR - ❌ Test error | Context: test_context
+2025-07-27 16:27:57,008 - WARNING - ⚠️ Test warning | Context: test_context

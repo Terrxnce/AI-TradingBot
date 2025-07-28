@@ -1,4 +1,7 @@
 import MetaTrader5 as mt5
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'Data Files'))
 from config import FTMO_PARAMS
 
 def calculate_lot_size(symbol, sl_pips, risk_pct=1.0):

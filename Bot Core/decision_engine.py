@@ -21,6 +21,9 @@
 # ------------------------------------------------------------------------------------
 
 
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
 from config import CONFIG  # Optional config import
 from ta.volatility import average_true_range
 import pandas as pd

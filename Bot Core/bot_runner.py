@@ -10,23 +10,57 @@ import time
 import MetaTrader5 as mt5
 import requests
 from datetime import datetime, timedelta
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from get_candles import get_latest_candle_data
 from strategy_engine import analyze_structure
 from decision_engine import evaluate_trade_decision, calculate_dynamic_sl_tp, build_ai_prompt
 from broker_interface import initialize_mt5, shutdown_mt5, place_trade
-from config import CONFIG
+import importlib
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
+import config
 from trailing_stop import apply_trailing_stop
 from position_manager import check_for_partial_close, close_trades_at_4pm
 from risk_guard import can_trade
 from trade_logger import log_trade
 from session_utils import detect_session
-from news_guard import get_macro_sentiment
+from news_guard import get_macro_sentiment, should_block_trading
 from profit_guard import check_and_lock_profits
+from error_handler import safe_mt5_operation, validate_trade_parameters, performance_monitor
+from performance_metrics import performance_metrics
+from notifier import send_bot_online_notification, send_trading_complete_notification, send_bot_offline_notification
 import json 
 
 
 
 from datetime import time as dt_time
+
+def reload_config():
+    """Dynamically reload configuration from config.py"""
+    try:
+        importlib.reload(config)
+        config_data = config.CONFIG
+        
+        # Validate required config fields
+        required_fields = [
+            "min_score_for_trade", "lot_size", "delay_seconds",
+            "partial_close_trigger_percent", "full_close_trigger_percent",
+            "allowed_trading_window"
+        ]
+        
+        missing_fields = [field for field in required_fields if field not in config_data]
+        if missing_fields:
+            print(f"⚠️ Missing required config fields: {missing_fields}")
+            print("⚠️ Using default values where possible")
+        
+        return config_data
+    except Exception as e:
+        print(f"⚠️ Failed to reload config: {e}")
+        return config.CONFIG
+
 
 # === Settings ===
 SYMBOLS = sys.argv[1:]
@@ -35,8 +69,9 @@ if not SYMBOLS:
     sys.exit(1)
 
 TIMEFRAME = mt5.TIMEFRAME_M15
-DELAY_SECONDS = CONFIG.get("delay_seconds", 60 * 15)
-LOT_SIZE = CONFIG.get("lot_size", 1.0)
+def get_current_config():
+    """Get current configuration (reloaded each time)"""
+    return reload_config()
 
 def is_pm_session():
     now = datetime.now().time()
@@ -127,16 +162,60 @@ def ensure_symbol_visible(symbol):
 
 # === Main Bot Logic ===
 def run_bot():
-    initialize_mt5()
+    # Initialize MT5 directly first
+    try:
+        initialize_mt5()
+        print("✅ MT5 initialized")
+    except Exception as e:
+        print(f"❌ Failed to initialize MT5: {e}")
+        return
+    
+    # Verify connection with error handling
+    if not safe_mt5_operation(lambda: mt5.terminal_info() and mt5.version()):
+        print("❌ MT5 connection verification failed")
+        return
+    
+    # Send bot online notification
+    try:
+        send_bot_online_notification()
+        print("📤 Bot online notification sent to Telegram")
+    except Exception as e:
+        print(f"⚠️ Failed to send online notification: {e}")
+    
     trade_counter = {}
+    loop_count = 0
+    print("✅ Bot started with enhanced error handling and performance monitoring")
+    
+    # Initialize heartbeat
+    try:
+        with open("bot_heartbeat.json", "w") as f:
+            initial_heartbeat = {
+                "last_heartbeat": datetime.now().isoformat(),
+                "bot_status": "starting",
+                "current_symbols": SYMBOLS,
+                "loop_count": 0,
+                "last_analysis": datetime.now().isoformat(),
+                "mt5_connected": True,
+                "news_protection_active": False
+            }
+            json.dump(initial_heartbeat, f)
+    except Exception as e:
+        print(f"⚠️ Failed to initialize heartbeat: {e}")
 
     try:
         while True:
-            if not mt5.terminal_info() or not mt5.version():
-                print("⚠️ MT5 appears disconnected. Reinitializing...")
+            # Reload configuration at the start of each loop
+            current_config = get_current_config()
+            DELAY_SECONDS = current_config.get("delay_seconds", 60 * 15)
+            
+            # Enhanced connection check with error handling
+            if not safe_mt5_operation(lambda: mt5.terminal_info() and mt5.version()):
+                print("⚠️ MT5 appears disconnected. Reinitializing with error handling...")
                 shutdown_mt5()
                 time.sleep(2)
-                initialize_mt5()
+                if not safe_mt5_operation(initialize_mt5):
+                    print("❌ Failed to reinitialize MT5")
+                    continue
 
             now = datetime.now()
             current_hour = now.hour
@@ -150,16 +229,57 @@ def run_bot():
             for symbol in SYMBOLS:
                 print(f"\n⏳ Analyzing {symbol}...")
 
+                # Check news protection before analysis
+                if should_block_trading():
+                    print(f"🚫 Skipping {symbol} — news protection active")
+                    # Log missed trade reason
+                    log_entry = {
+                        "timestamp": datetime.now().isoformat(),
+                        "symbol": symbol,
+                        "ai_decision": "BLOCKED",
+                        "ai_confidence": "N/A",
+                        "ai_reasoning": "News protection active",
+                        "ai_risk_note": "High-impact news event detected",
+                        "technical_score": 0.0,
+                        "ema_trend": "N/A",
+                        "final_direction": "BLOCKED",
+                        "executed": False,
+                        "ai_override": False,
+                        "override_reason": "News protection",
+                        "execution_source": "news_block"
+                    }
+                    with open("ai_decision_log.jsonl", "a") as f:
+                        f.write(json.dumps(log_entry) + "\n")
+                    continue
+
                 check_and_lock_profits()
 
-                if CONFIG.get("restrict_usd_to_am", False):
-                    keywords = CONFIG.get("usd_related_keywords", [])
+                if current_config.get("restrict_usd_to_am", False):
+                    keywords = current_config.get("usd_related_keywords", [])
                     if any(k in symbol.upper() for k in keywords):
-                        time_window = CONFIG.get("allowed_trading_window", {})
+                        time_window = current_config.get("allowed_trading_window", {})
                         start = time_window.get("start_hour", 9)
                         end = time_window.get("end_hour", 11)
                         if not (start <= current_hour < end):
                             print(f"⏳ Skipping {symbol} — outside {start}:00–{end}:00 window for USD-related pairs.")
+                            # Log missed trade reason
+                            log_entry = {
+                                "timestamp": datetime.now().isoformat(),
+                                "symbol": symbol,
+                                "ai_decision": "BLOCKED",
+                                "ai_confidence": "N/A",
+                                "ai_reasoning": f"Outside USD trading window {start}:00-{end}:00",
+                                "ai_risk_note": "USD pairs restricted to morning session",
+                                "technical_score": 0.0,
+                                "ema_trend": "N/A",
+                                "final_direction": "BLOCKED",
+                                "executed": False,
+                                "ai_override": False,
+                                "override_reason": "USD time restriction",
+                                "execution_source": "usd_time_block"
+                            }
+                            with open("ai_decision_log.jsonl", "a") as f:
+                                f.write(json.dumps(log_entry) + "\n")
                             continue
 
                 try:
@@ -175,8 +295,13 @@ def run_bot():
                     print(f"⚠️ Skipping {symbol} – could not resolve symbol info.")
                     continue
 
-                candles_m15 = get_latest_candle_data(symbol, mt5.TIMEFRAME_M15)
-                candles_h1 = get_latest_candle_data(symbol, mt5.TIMEFRAME_H1)
+                # Enhanced data fetching with validation
+                candles_m15 = safe_mt5_operation(get_latest_candle_data, symbol, mt5.TIMEFRAME_M15)
+                candles_h1 = safe_mt5_operation(get_latest_candle_data, symbol, mt5.TIMEFRAME_H1)
+                
+                if candles_m15 is None or candles_h1 is None:
+                    print(f"❌ Failed to fetch candle data for {symbol}")
+                    continue
 
                 ta_m15 = analyze_structure(candles_m15, timeframe=mt5.TIMEFRAME_M15)
                 ta_h1 = analyze_structure(candles_h1, timeframe=mt5.TIMEFRAME_H1)
@@ -193,7 +318,7 @@ def run_bot():
                 ai_sentiment = get_ai_sentiment(prompt)
                 print("🧠 AI Response:\n", ai_sentiment.strip())
 
-                if CONFIG.get("enable_pm_session_only", False) and not is_pm_session():
+                if current_config.get("enable_pm_session_only", False) and not is_pm_session():
                     print(f"⏳ Skipping {symbol} — outside PM session window.")
                     continue
 
@@ -216,6 +341,24 @@ def run_bot():
 
                 if not can_trade(ta_signals=ta_signals, ai_response_raw=ai_sentiment, call_ai_func=get_ai_sentiment, tech_score=technical_score):
                     print(f"⚠️ Skipped {symbol} — blocked by risk_guard.")
+                    # Log missed trade reason
+                    log_entry = {
+                        "timestamp": datetime.now().isoformat(),
+                        "symbol": symbol,
+                        "ai_decision": "BLOCKED",
+                        "ai_confidence": "N/A",
+                        "ai_reasoning": "Risk management blocked trade",
+                        "ai_risk_note": "Daily loss limit, drawdown, or cooldown active",
+                        "technical_score": technical_score,
+                        "ema_trend": ta_signals.get("ema_trend", "N/A"),
+                        "final_direction": "BLOCKED",
+                        "executed": False,
+                        "ai_override": False,
+                        "override_reason": "Risk guard",
+                        "execution_source": "risk_block"
+                    }
+                    with open("ai_decision_log.jsonl", "a") as f:
+                        f.write(json.dumps(log_entry) + "\n")
                     continue
 
                 trade_counter.setdefault(symbol_key, [])
@@ -223,6 +366,24 @@ def run_bot():
 
                 if len(trade_counter[symbol_key]) >= 2:
                     print(f"❌ Skipping {symbol_key}: 2-trade-per-hour limit reached.")
+                    # Log missed trade reason
+                    log_entry = {
+                        "timestamp": datetime.now().isoformat(),
+                        "symbol": symbol,
+                        "ai_decision": "BLOCKED",
+                        "ai_confidence": "N/A",
+                        "ai_reasoning": "2-trade-per-hour limit reached",
+                        "ai_risk_note": "Trade frequency limit exceeded",
+                        "technical_score": technical_score,
+                        "ema_trend": ta_signals.get("ema_trend", "N/A"),
+                        "final_direction": "BLOCKED",
+                        "executed": False,
+                        "ai_override": False,
+                        "override_reason": "Trade limit",
+                        "execution_source": "frequency_block"
+                    }
+                    with open("ai_decision_log.jsonl", "a") as f:
+                        f.write(json.dumps(log_entry) + "\n")
                     continue
 
                 ai_data = parse_ai_sentiment(ai_sentiment)
@@ -232,7 +393,7 @@ def run_bot():
                 execution_source = "AI"
                 override_reason = ""
 
-                if technical_score >= CONFIG["min_score_for_trade"] and ema_trend in ["bullish", "bearish"]:
+                if technical_score >= current_config["min_score_for_trade"] and ema_trend in ["bullish", "bearish"]:
                     if ai_direction == "HOLD":
                         final_direction = "BUY" if ema_trend == "bullish" else "SELL"
                         execution_source = "technical_override"
@@ -249,11 +410,16 @@ def run_bot():
 
                         price = candles_m15.iloc[-1]["close"]
                         sl, tp = calculate_dynamic_sl_tp(price, final_direction, candles_m15)
-                        lot_sizes = {k.upper(): v for k, v in CONFIG.get("LOT_SIZES", {}).items()}
-                        lot = lot_sizes.get(symbol_key, CONFIG.get("lot_size", 1.0))
+                        lot_sizes = {k.upper(): v for k, v in current_config.get("LOT_SIZES", {}).items()}
+                        lot = lot_sizes.get(symbol_key, current_config.get("lot_size", 1.0))
 
                         print(f"🧶 Resolved lot size for {symbol}: {lot}")
                         print(f"🎯 Dynamic SL: {sl} | TP: {tp} | Lot: {lot}")
+
+                        # Validate trade parameters before execution
+                        if not validate_trade_parameters(symbol, lot, sl, tp):
+                            print(f"❌ Trade parameters validation failed for {symbol}")
+                            continue
 
                         success = place_trade(
                             symbol=symbol,
@@ -297,18 +463,56 @@ def run_bot():
 
             apply_trailing_stop(minutes=30, trail_pips=20)
             check_for_partial_close()
+            
+            # Update heartbeat for GUI status monitoring
+            try:
+                with open("bot_heartbeat.json", "w") as f:
+                    heartbeat_data = {
+                        "last_heartbeat": datetime.now().isoformat(),
+                        "bot_status": "running",
+                        "current_symbols": SYMBOLS,
+                        "loop_count": loop_count + 1,
+                        "last_analysis": now.isoformat(),
+                        "mt5_connected": bool(mt5.terminal_info()),
+                        "news_protection_active": should_block_trading()
+                    }
+                    json.dump(heartbeat_data, f)
+            except Exception as e:
+                print(f"⚠️ Failed to update heartbeat: {e}")
+            
+            # Generate performance report every 4 hours
+            if now.hour % 4 == 0 and now.minute < 5:
+                print("\n📊 Generating performance report...")
+                report = performance_metrics.generate_performance_report()
+                print("✅ Performance report generated")
+            
+            loop_count += 1
             print(f"⏲ Waiting {DELAY_SECONDS / 60} minutes...")
             time.sleep(DELAY_SECONDS)
 
     except KeyboardInterrupt:
         print("🚑 Bot stopped by user.")
+        # Send trading complete notification
+        try:
+            send_trading_complete_notification()
+            print("📤 Trading complete notification sent to Telegram")
+        except Exception as e:
+            print(f"⚠️ Failed to send completion notification: {e}")
     except Exception as e:
+        performance_monitor.log_error(f"Unhandled error: {e}", "run_bot")
         print(f"❌ Unhandled error: {e}")
+        # Send offline notification for unexpected shutdown
+        try:
+            send_bot_offline_notification()
+            print("📤 Bot offline notification sent to Telegram")
+        except Exception as notify_e:
+            print(f"⚠️ Failed to send offline notification: {notify_e}")
         if "not found" in str(e).lower() or "not initialized" in str(e).lower():
             print("🔁 Attempting to reinitialize MT5...")
             shutdown_mt5()
             time.sleep(2)
-            initialize_mt5()
+            if not safe_mt5_operation(initialize_mt5):
+                print("❌ Failed to reinitialize MT5")
         else:
             raise
     finally:

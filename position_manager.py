@@ -1,7 +1,36 @@
 import MetaTrader5 as mt5
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'Data Files'))
 from config import CONFIG
 from trade_state_tracker import mark_partial_closed
 from datetime import datetime
+import json
+
+# State file for tracking 4PM closure
+FOUR_PM_STATE_FILE = "four_pm_closure_state.json"
+
+def load_four_pm_state():
+    """Load 4PM closure state"""
+    try:
+        if os.path.exists(FOUR_PM_STATE_FILE):
+            with open(FOUR_PM_STATE_FILE, "r") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"⚠️ Failed to load 4PM state: {e}")
+    return {"last_closure_date": None}
+
+def save_four_pm_state():
+    """Save 4PM closure state"""
+    try:
+        state = {
+            "last_closure_date": datetime.now().strftime("%Y-%m-%d"),
+            "closure_time": datetime.now().isoformat()
+        }
+        with open(FOUR_PM_STATE_FILE, "w") as f:
+            json.dump(state, f)
+    except Exception as e:
+        print(f"⚠️ Failed to save 4PM state: {e}")
 
 
 def check_for_partial_close():
@@ -152,12 +181,21 @@ def close_all_positions():
 
 def close_trades_at_4pm():
     """
-    Check if it's 4:00 PM and close all trades if so.
+    Check if it's 4:00 PM or later and close all trades if so.
     Should be called in the main bot loop.
     """
     now = datetime.now()
-    if now.hour == 16 and now.minute == 0:
-        print("🕓 4:00 PM detected - Auto-closing all trades...")
-        close_all_positions()
-        return True
+    today = now.strftime("%Y-%m-%d")
+    
+    # Load state to check if already closed today
+    state = load_four_pm_state()
+    if state.get("last_closure_date") == today:
+        return False  # Already closed today
+    
+    # Check if it's 16:00 (4:00 PM) or later
+    if now.hour >= 16:
+        print("🕓 4:00 PM or later detected - Auto-closing all trades...")
+        if close_all_positions():
+            save_four_pm_state()  # Save state after successful closure
+            return True
     return False

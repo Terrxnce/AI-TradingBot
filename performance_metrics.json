@@ -1,0 +1,96 @@
+{
+  "overall_metrics": {
+    "total_trades": 38,
+    "win_rate": 0,
+    "profit_factor": 0,
+    "average_trade": 0,
+    "total_profit": 0,
+    "max_drawdown": 0,
+    "sharpe_ratio": 0,
+    "risk_adjusted_return": 0
+  },
+  "daily_metrics": {
+    "2025-07-21": {
+      "trades": 18,
+      "profit": 0,
+      "wins": 0,
+      "losses": 0,
+      "win_rate": 0
+    },
+    "2025-07-22": {
+      "trades": 5,
+      "profit": 0,
+      "wins": 0,
+      "losses": 0,
+      "win_rate": 0
+    },
+    "2025-07-23": {
+      "trades": 5,
+      "profit": 0,
+      "wins": 0,
+      "losses": 0,
+      "win_rate": 0
+    },
+    "2025-07-24": {
+      "trades": 5,
+      "profit": 0,
+      "wins": 0,
+      "losses": 0,
+      "win_rate": 0
+    },
+    "2025-07-25": {
+      "trades": 5,
+      "profit": 0,
+      "wins": 0,
+      "losses": 0,
+      "win_rate": 0
+    }
+  },
+  "symbol_metrics": {
+    "XAUUSD": {
+      "trades": 1,
+      "profit": 0,
+      "win_rate": 0,
+      "average_trade": 0
+    },
+    "USDJPY": {
+      "trades": 36,
+      "profit": 0,
+      "win_rate": 0,
+      "average_trade": 0
+    },
+    "EURJPY": {
+      "trades": 1,
+      "profit": 0,
+      "win_rate": 0,
+      "average_trade": 0
+    }
+  },
+  "session_metrics": {
+    "Post_Market": {
+      "trades": 9,
+      "profit": 0,
+      "win_rate": 0,
+      "average_trade": 0
+    },
+    "NY_PreMarket": {
+      "trades": 3,
+      "profit": 0,
+      "win_rate": 0,
+      "average_trade": 0
+    },
+    "New_York": {
+      "trades": 25,
+      "profit": 0,
+      "win_rate": 0,
+      "average_trade": 0
+    },
+    "London": {
+      "trades": 1,
+      "profit": 0,
+      "win_rate": 0,
+      "average_trade": 0
+    }
+  },
+  "generated_at": "2025-07-27T16:27:57.934738"
+}

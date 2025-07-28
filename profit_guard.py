@@ -1,5 +1,8 @@
 import MetaTrader5 as mt5
 from datetime import datetime, timedelta
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'Data Files'))
 from config import CONFIG
 import os
 import json
