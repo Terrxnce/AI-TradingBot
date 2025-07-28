@@ -23,13 +23,39 @@ import os
 class LogProcessor:
     def __init__(self, ai_log_file: str = None, trade_log_file: str = None):
         if ai_log_file is None:
-            # Find AI log file in Data Files directory
+            # Try multiple possible paths for ai_decision_log.jsonl
             script_dir = os.path.dirname(os.path.dirname(__file__))
-            ai_log_file = os.path.join(script_dir, "..", "Data Files", "ai_decision_log.jsonl")
+            possible_ai_paths = [
+                os.path.join(script_dir, "..", "Bot Core", "ai_decision_log.jsonl"),
+                os.path.join(script_dir, "..", "Data Files", "ai_decision_log.jsonl"),
+                os.path.join(script_dir, "..", "ai_decision_log.jsonl"),
+                "ai_decision_log.jsonl"
+            ]
+            
+            for path in possible_ai_paths:
+                if os.path.exists(path):
+                    ai_log_file = path
+                    break
+            else:
+                ai_log_file = possible_ai_paths[0]  # Default to first path
+                
         if trade_log_file is None:
-            # Find trade log file in logs directory
+            # Try multiple possible paths for trade_log.csv
             script_dir = os.path.dirname(os.path.dirname(__file__))
-            trade_log_file = os.path.join(script_dir, "..", "logs", "trade_log.csv")
+            possible_trade_paths = [
+                os.path.join(script_dir, "..", "Bot Core", "logs", "trade_log.csv"),
+                os.path.join(script_dir, "..", "logs", "trade_log.csv"),
+                os.path.join(script_dir, "..", "Data Files", "trade_log.csv"),
+                "logs/trade_log.csv"
+            ]
+            
+            for path in possible_trade_paths:
+                if os.path.exists(path):
+                    trade_log_file = path
+                    break
+            else:
+                trade_log_file = possible_trade_paths[0]  # Default to first path
+                
         self.ai_log_file = ai_log_file
         self.trade_log_file = trade_log_file
     
@@ -158,15 +184,20 @@ class LogProcessor:
             filtered_df = filtered_df[filtered_df['timestamp'] >= pd.to_datetime(filters['start_date'])]
         
         if 'end_date' in filters and filters['end_date']:
-            filtered_df = filtered_df[filtered_df['timestamp'] <= pd.to_datetime(filters['end_date'])]
+            # Include the full end date by adding 1 day
+            end_datetime = pd.to_datetime(filters['end_date']) + pd.Timedelta(days=1)
+            filtered_df = filtered_df[filtered_df['timestamp'] < end_datetime]
         
         # Symbol filter
         if 'symbols' in filters and filters['symbols']:
             filtered_df = filtered_df[filtered_df['symbol'].isin(filters['symbols'])]
         
-        # Action filter (BUY/SELL)
+        # Action/Direction filter (handle both column names)
         if 'actions' in filters and filters['actions']:
-            filtered_df = filtered_df[filtered_df['action'].isin(filters['actions'])]
+            if 'direction' in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df['direction'].isin(filters['actions'])]
+            elif 'action' in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df['action'].isin(filters['actions'])]
         
         # Result filter
         if 'results' in filters and filters['results']:
@@ -212,19 +243,17 @@ class LogProcessor:
             'executed_trades': len(df[df['result'] == 'EXECUTED']) if 'result' in df.columns else len(df)
         }
         
-        # Action distribution
-        if 'action' in df.columns:
+        # Action distribution (handle both column names)
+        if 'direction' in df.columns:
+            action_counts = df['direction'].value_counts().to_dict()
+            metrics['action_distribution'] = action_counts
+        elif 'action' in df.columns:
             action_counts = df['action'].value_counts().to_dict()
             metrics['action_distribution'] = action_counts
         
         # Symbol distribution
         symbol_counts = df['symbol'].value_counts().to_dict()
         metrics['symbol_distribution'] = symbol_counts
-        
-        # Lot size statistics
-        if 'lot' in df.columns:
-            metrics['total_volume'] = df['lot'].sum()
-            metrics['average_lot_size'] = df['lot'].mean()
         
         return metrics
     

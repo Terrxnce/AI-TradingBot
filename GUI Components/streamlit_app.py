@@ -16,21 +16,45 @@
 
 import streamlit as st
 import pandas as pd
-import json
-import MetaTrader5 as mt5
-from datetime import datetime, timedelta, date
 import plotly.express as px
 import plotly.graph_objects as go
-import sys
+from datetime import datetime, timedelta
+import json
 import os
+import sys
+from io import BytesIO
+import MetaTrader5 as mt5
 
 # Add paths for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))  # Add root directory
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Bot Core'))  # Add Bot Core directory
 
 from utils.config_manager import config_manager
-from utils.log_utils import log_processor
-from performance_metrics import performance_metrics
+
+# Initialize log processor with explicit paths
+script_dir = os.path.dirname(__file__)
+ai_log_path = os.path.join(script_dir, "..", "Bot Core", "ai_decision_log.jsonl")
+trade_log_path = os.path.join(script_dir, "..", "Bot Core", "logs", "trade_log.csv")
+
+from utils.log_utils import LogProcessor
+log_processor = LogProcessor(ai_log_file=ai_log_path, trade_log_file=trade_log_path)
+
+# Try to import performance_metrics with fallback
+try:
+    from performance_metrics import performance_metrics
+except ImportError:
+    try:
+        # Try alternative import path
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+        from performance_metrics import performance_metrics
+    except ImportError:
+        # Create a dummy performance_metrics if import fails
+        class DummyPerformanceMetrics:
+            def generate_performance_report(self):
+                return {'overall_metrics': {}}
+        performance_metrics = DummyPerformanceMetrics()
+
 import time
 
 # === App Configuration ===
@@ -94,10 +118,17 @@ def load_mt5_positions():
 def load_bot_heartbeat():
     """Load bot heartbeat data"""
     try:
-        heartbeat_file = os.path.join(os.path.dirname(__file__), '..', 'bot_heartbeat.json')
-        if os.path.exists(heartbeat_file):
-            with open(heartbeat_file, 'r') as f:
-                return json.load(f)
+        # Try multiple possible paths for bot_heartbeat.json
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), '..', 'bot_heartbeat.json'),
+            os.path.join(os.path.dirname(__file__), '..', 'Bot Core', 'bot_heartbeat.json'),
+            "bot_heartbeat.json"
+        ]
+        
+        for heartbeat_file in possible_paths:
+            if os.path.exists(heartbeat_file):
+                with open(heartbeat_file, 'r') as f:
+                    return json.load(f)
         return None
     except Exception as e:
         st.error(f"Error loading heartbeat: {e}")
@@ -503,7 +534,7 @@ def render_ai_decisions():
     # Date range
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input("Start Date", value=datetime.now().date() - timedelta(days=7), key="ai_start")
+        start_date = st.date_input("Start Date", value=datetime(2025, 7, 27).date(), key="ai_start")
     with col2:
         end_date = st.date_input("End Date", value=datetime.now().date(), key="ai_end")
     
@@ -780,25 +811,53 @@ def render_sidebar():
         recent_decisions = log_processor.get_recent_entries(ai_log, 24)
         st.sidebar.metric("24h AI Decisions", len(recent_decisions))
     
-    if not trade_log.empty:
+    # Use MT5 trade history for accurate 24h trade count
+    mt5_trades = load_mt5_trade_history(days=1)  # Get last 24 hours
+    if not mt5_trades.empty:
+        # Filter for actual trades (BUY/SELL) in last 24 hours
+        now = datetime.now()
+        yesterday = now - timedelta(hours=24)
+        recent_mt5_trades = mt5_trades[
+            (mt5_trades['time'] >= yesterday) & 
+            (mt5_trades['type'].isin(['BUY', 'SELL']))  # Filter for BUY/SELL trades
+        ]
+        
+        # Count unique trades (not deals) - count only BUY entries
+        unique_trades = recent_mt5_trades[recent_mt5_trades['type'] == 'BUY']
+        trade_count = len(unique_trades)
+        
+        st.sidebar.metric("24h Trades", trade_count)
+    elif not trade_log.empty:
+        # Fallback to CSV trade log if MT5 data unavailable
         recent_trades = log_processor.get_recent_entries(trade_log, 24)
         st.sidebar.metric("24h Trades", len(recent_trades))
+    else:
+        st.sidebar.metric("24h Trades", 0)
         
-        # Calculate quick performance metrics
-        if 'profit' in trade_log.columns:
-            total_profit = trade_log['profit'].sum()
-            win_rate = len(trade_log[trade_log['profit'] > 0]) / len(trade_log) * 100
-            avg_trade = trade_log['profit'].mean()
-            
-            st.sidebar.metric("Total P&L", f"${total_profit:.2f}")
-            st.sidebar.metric("Win Rate", f"{win_rate:.1f}%")
-            st.sidebar.metric("Avg Trade", f"${avg_trade:.2f}")
-            
-            # Recent performance (last 7 days)
-            recent_trades_7d = log_processor.get_recent_entries(trade_log, 168)  # 7 days
-            if not recent_trades_7d.empty and 'profit' in recent_trades_7d.columns:
-                recent_profit = recent_trades_7d['profit'].sum()
-                st.sidebar.metric("7d P&L", f"${recent_profit:.2f}")
+    # Get MT5 balance
+    try:
+        if mt5.initialize():
+            account_info = mt5.account_info()
+            if account_info:
+                current_balance = account_info.balance
+                st.sidebar.metric("Current Balance", f"${current_balance:.2f}")
+            mt5.shutdown()
+    except:
+        st.sidebar.metric("Current Balance", "N/A")
+    
+    # Calculate quick performance metrics
+    if not trade_log.empty and 'profit' in trade_log.columns:
+        win_rate = len(trade_log[trade_log['profit'] > 0]) / len(trade_log) * 100
+        avg_trade = trade_log['profit'].mean()
+        
+        st.sidebar.metric("Win Rate", f"{win_rate:.1f}%")
+        st.sidebar.metric("Avg Trade", f"${avg_trade:.2f}")
+        
+        # Recent performance (last 7 days)
+        recent_trades_7d = log_processor.get_recent_entries(trade_log, 168)  # 7 days
+        if not recent_trades_7d.empty and 'profit' in recent_trades_7d.columns:
+            recent_profit = recent_trades_7d['profit'].sum()
+            st.sidebar.metric("7d P&L", f"${recent_profit:.2f}")
     
     # Config backups
     st.sidebar.subheader("💾 Backups")
