@@ -88,5 +88,13 @@ def check_and_lock_profits():
         print(f"🎯 Profit target of {threshold_percent}% hit. Closing all trades.")
         close_all_positions()
         record_lock_event()
+        
+        # Reset partial close cycle when full close is triggered
+        try:
+            from position_manager import save_partial_close_cycle_state
+            save_partial_close_cycle_state(triggered=False)
+            print("🔄 Partial close cycle reset due to full profit lock.")
+        except Exception as e:
+            print(f"⚠️ Failed to reset partial close cycle: {e}")
     else:
         print("🔄 No profit lock triggered.")

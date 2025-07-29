@@ -1,0 +1,38 @@
+[
+  {
+    "event": "French Consumer Spending m/m",
+    "datetime": "2025-07-30T06:30:00",
+    "currency": "EUR",
+    "impact": "High"
+  },
+  {
+    "event": "Federal Funds Rate",
+    "datetime": "2025-07-30T19:00:00",
+    "currency": "USD",
+    "impact": "High"
+  },
+  {
+    "event": "FOMC Statement",
+    "datetime": "2025-07-30T19:00:00",
+    "currency": "USD",
+    "impact": "High"
+  },
+  {
+    "event": "FOMC Press Conference",
+    "datetime": "2025-07-30T19:30:00",
+    "currency": "USD",
+    "impact": "High"
+  },
+  {
+    "event": "ADP Non-Farm Employment Change",
+    "datetime": "2025-07-30T12:15:00",
+    "currency": "USD",
+    "impact": "High"
+  },
+  {
+    "event": "Advance GDP q/q",
+    "datetime": "2025-07-30T12:30:00",
+    "currency": "USD",
+    "impact": "High"
+  }
+] 

@@ -34,7 +34,7 @@ CONFIG = {
     "delay_seconds": 60 * 15,  # 15-minute loop
 
     # ✅ Symbol-Specific Lot Sizes
-    "lot_size": 0.01, 
+    "lot_size": 1.25,
     "LOT_SIZES": {
         "XAUUSD": 0.01,
         "US500.cash": 3.5,
@@ -98,6 +98,11 @@ CONFIG = {
     "use_fib": True,
     "fib_window": 30,  # candles to look back for swing
     "fib_zone": (0.5, 0.618),
+
+    # ✅ News Protection Settings (Red Folder Filter)
+    "enable_news_protection": True,  # Set to False to disable news protection temporarily
+    "news_protection_minutes": 30,   # minutes before/after red folder events (±30 min = 1 hour total)
+    "news_refresh_interval_hours": 24,  # how often to refresh news data
 }
 
 # Add any other configuration options you need here

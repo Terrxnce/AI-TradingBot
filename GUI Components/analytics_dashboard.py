@@ -52,6 +52,25 @@ class AnalyticsDashboard:
             if os.path.exists(self.balance_history_path):
                 df = pd.read_csv(self.balance_history_path)
                 df['date'] = pd.to_datetime(df['date'])
+                
+                # Add today's real-time data if not already present
+                today = datetime.now().date()
+                if df.empty or df['date'].dt.date.iloc[-1] != today:
+                    try:
+                        import MetaTrader5 as mt5
+                        if mt5.initialize():
+                            account_info = mt5.account_info()
+                            if account_info:
+                                today_data = pd.DataFrame({
+                                    'date': [today],
+                                    'balance': [account_info.balance],
+                                    'equity': [account_info.equity]
+                                })
+                                df = pd.concat([df, today_data], ignore_index=True)
+                            mt5.shutdown()
+                    except Exception as e:
+                        st.warning(f"Could not get real-time balance: {e}")
+                
                 return df
             else:
                 # Create balance history from trade log and MT5 data
@@ -105,16 +124,28 @@ class AnalyticsDashboard:
             return pd.DataFrame()
     
     def get_top_metrics(self) -> Dict:
-        """Calculate top metrics overview"""
+        """Calculate top metrics overview using real-time MT5 data"""
         try:
+            import MetaTrader5 as mt5
             initial_balance = self.ftmo_params.get("initial_balance", 10000)
             
-            if not self.balance_history.empty:
-                current_balance = self.balance_history['balance'].iloc[-1]
-                current_equity = self.balance_history['equity'].iloc[-1]
-            else:
-                current_balance = initial_balance
-                current_equity = initial_balance
+            # Get real-time MT5 balance and equity
+            current_balance = initial_balance
+            current_equity = initial_balance
+            
+            try:
+                if mt5.initialize():
+                    account_info = mt5.account_info()
+                    if account_info:
+                        current_balance = account_info.balance
+                        current_equity = account_info.equity
+                    mt5.shutdown()
+            except Exception as e:
+                st.warning(f"Could not get real-time MT5 data: {e}")
+                # Fallback to balance history
+                if not self.balance_history.empty:
+                    current_balance = self.balance_history['balance'].iloc[-1]
+                    current_equity = self.balance_history['equity'].iloc[-1]
             
             total_pnl = current_balance - initial_balance
             profit_percent = (total_pnl / initial_balance) * 100 if initial_balance > 0 else 0
@@ -142,13 +173,38 @@ class AnalyticsDashboard:
             return {}
     
     def create_daily_performance_chart(self) -> go.Figure:
-        """Create daily performance chart with markers"""
+        """Create daily performance chart with markers using real-time data"""
         try:
             if self.balance_history.empty:
                 return go.Figure()
             
-            # Calculate daily changes for markers
+            # Get real-time MT5 data for today
             balance_data = self.balance_history.copy()
+            today = datetime.now().date()
+            
+            try:
+                import MetaTrader5 as mt5
+                if mt5.initialize():
+                    account_info = mt5.account_info()
+                    if account_info:
+                        # Update today's data with real-time values
+                        today_mask = balance_data['date'].dt.date == today
+                        if today_mask.any():
+                            balance_data.loc[today_mask, 'balance'] = account_info.balance
+                            balance_data.loc[today_mask, 'equity'] = account_info.equity
+                        else:
+                            # Add today's data if not present
+                            today_data = pd.DataFrame({
+                                'date': [today],
+                                'balance': [account_info.balance],
+                                'equity': [account_info.equity]
+                            })
+                            balance_data = pd.concat([balance_data, today_data], ignore_index=True)
+                    mt5.shutdown()
+            except Exception as e:
+                st.warning(f"Could not get real-time chart data: {e}")
+            
+            # Calculate daily changes for markers
             balance_data['change'] = balance_data['balance'].diff()
             
             # Create markers based on daily P&L
@@ -369,8 +425,26 @@ class AnalyticsDashboard:
             return {}
     
     def render_dashboard(self):
+        """Render the analytics dashboard with real-time updates"""
+        # Add cache control for real-time updates
+        st.cache_data.clear()
+        
+        # Refresh balance history with real-time data
+        self.balance_history = self._load_balance_history()
+        
         """Render the complete analytics dashboard"""
         st.title("🧠 D.E.V.I. Analytics Dashboard")
+        
+        # Add refresh button
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            if st.button("🔄 Refresh Data", key="refresh_analytics"):
+                st.cache_data.clear()
+                st.rerun()
+        with col2:
+            st.caption("Last updated: " + datetime.now().strftime("%H:%M:%S"))
+            st.caption("Data source: Real-time MT5")
+        
         st.markdown("---")
         
         # Top Metrics Overview
@@ -402,6 +476,7 @@ class AnalyticsDashboard:
         
         # Daily Performance Chart
         st.header("📈 Daily Performance Chart")
+        st.caption("Chart includes real-time MT5 balance data for today")
         chart = self.create_daily_performance_chart()
         if chart.data:
             st.plotly_chart(chart, use_container_width=True)

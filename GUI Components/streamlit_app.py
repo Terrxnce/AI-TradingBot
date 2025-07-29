@@ -99,15 +99,20 @@ def check_password():
     return True
 
 # === Utility Functions ===
-@st.cache_data(ttl=60)  # Cache for 1 minute
+@st.cache_data(ttl=10)  # Cache for 10 seconds to reduce stale data
 def load_mt5_positions():
     """Load current MT5 positions"""
     try:
         if not mt5.initialize():
+            st.warning("⚠️ Failed to initialize MT5 connection")
             return pd.DataFrame()
         
         positions = mt5.positions_get()
         mt5.shutdown()
+        
+        if positions is None:
+            st.warning("⚠️ MT5 returned None for positions")
+            return pd.DataFrame()
         
         if not positions:
             return pd.DataFrame()
@@ -115,10 +120,10 @@ def load_mt5_positions():
         positions_df = pd.DataFrame(list(positions), columns=positions[0]._asdict().keys())
         return positions_df[["symbol", "type", "volume", "price_open", "profit", "time"]]
     except Exception as e:
-        st.error(f"Error loading MT5 positions: {e}")
+        st.error(f"❌ Error loading MT5 positions: {e}")
         return pd.DataFrame()
 
-@st.cache_data(ttl=10)  # Cache for 10 seconds
+@st.cache_data(ttl=5)  # Cache for 5 seconds to get more frequent updates
 def load_bot_heartbeat():
     """Load bot heartbeat data"""
     try:
@@ -586,7 +591,18 @@ def render_trade_logs():
     with tab3:
         st.subheader("Current Open Positions")
         
+        # Add refresh button for positions
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            if st.button("🔄 Refresh Positions", key="refresh_positions"):
+                st.cache_data.clear()
+                st.rerun()
+        
         positions = load_mt5_positions()
+        
+        # Show last update time
+        st.caption(f"Last updated: {datetime.now().strftime('%H:%M:%S')}")
+        
         if not positions.empty:
             st.dataframe(positions, use_container_width=True)
 
@@ -818,7 +834,12 @@ def render_sidebar():
         pass
     
     # Load heartbeat data
-    heartbeat_data = load_bot_heartbeat()
+    try:
+        heartbeat_data = load_bot_heartbeat()
+    except Exception as e:
+        st.sidebar.error("❌ Failed to load heartbeat")
+        st.sidebar.caption(f"Heartbeat Error: {str(e)[:50]}...")
+        heartbeat_data = None
     
     if heartbeat_data:
         # Bot Status
@@ -877,46 +898,58 @@ def render_sidebar():
     st.sidebar.subheader("📊 Quick Performance")
     
     # Load recent data with proper filtering
-    ai_log = log_processor.load_ai_decision_log()
-    trade_log = log_processor.load_trade_log()
+    try:
+        ai_log = log_processor.load_ai_decision_log()
+    except Exception as e:
+        st.sidebar.error("❌ Failed to load AI log")
+        ai_log = pd.DataFrame()
+        
+    try:
+        trade_log = log_processor.load_trade_log()
+    except Exception as e:
+        st.sidebar.error("❌ Failed to load trade log")
+        trade_log = pd.DataFrame()
     
     # Calculate 24h AI decisions properly
-    if not ai_log.empty and 'timestamp' in ai_log.columns:
-        now = datetime.now()
-        yesterday = now - timedelta(hours=24)
-        
-        # Convert timestamp to datetime if it's string
-        if ai_log['timestamp'].dtype == 'object':
-            ai_log['timestamp'] = pd.to_datetime(ai_log['timestamp'])
-        
-        # Filter for last 24 hours
-        recent_decisions = ai_log[ai_log['timestamp'] >= yesterday]
-        st.sidebar.metric("24h AI Decisions", len(recent_decisions))
-    else:
-        st.sidebar.metric("24h AI Decisions", 0)
+    try:
+        if not ai_log.empty and 'timestamp' in ai_log.columns:
+            now = datetime.now()
+            yesterday = now - timedelta(hours=24)
+            
+            # Convert timestamp to datetime if it's string
+            if ai_log['timestamp'].dtype == 'object':
+                ai_log['timestamp'] = pd.to_datetime(ai_log['timestamp'])
+            
+            # Filter for last 24 hours
+            recent_decisions = ai_log[ai_log['timestamp'] >= yesterday]
+            st.sidebar.metric("24h AI Decisions", len(recent_decisions))
+        else:
+            st.sidebar.metric("24h AI Decisions", 0)
+    except Exception as e:
+        st.sidebar.metric("24h AI Decisions", "Error")
+        st.sidebar.caption(f"AI Log Error: {str(e)[:50]}...")
     
-    # Use MT5 trade history for accurate 24h trade count
-    mt5_trades = load_mt5_trade_history(days=1)  # Get last 24 hours
-    if not mt5_trades.empty:
-        # Filter for actual trades (BUY/SELL) in last 24 hours
-        now = datetime.now()
-        yesterday = now - timedelta(hours=24)
-        recent_mt5_trades = mt5_trades[
-            (mt5_trades['time'] >= yesterday) & 
-            (mt5_trades['type'].isin(['BUY', 'SELL']))  # Filter for BUY/SELL trades
-        ]
-        
-        # Count unique trades (not deals) - count only BUY entries
-        unique_trades = recent_mt5_trades[recent_mt5_trades['type'] == 'BUY']
-        trade_count = len(unique_trades)
-        
-        st.sidebar.metric("24h Trades", trade_count)
-    elif not trade_log.empty:
-        # Fallback to CSV trade log if MT5 data unavailable
-        recent_trades = log_processor.get_recent_entries(trade_log, 24)
-        st.sidebar.metric("24h Trades", len(recent_trades))
-    else:
-        st.sidebar.metric("24h Trades", 0)
+    # Calculate 24h trades from AI decision log (more accurate than MT5 history)
+    try:
+        if not ai_log.empty and 'timestamp' in ai_log.columns:
+            now = datetime.now()
+            yesterday = now - timedelta(hours=24)
+            
+            # Convert timestamp to datetime if it's string
+            if ai_log['timestamp'].dtype == 'object':
+                ai_log['timestamp'] = pd.to_datetime(ai_log['timestamp'])
+            
+            # Filter for last 24 hours and executed trades
+            recent_trades = ai_log[
+                (ai_log['timestamp'] >= yesterday) & 
+                (ai_log['executed'] == True)
+            ]
+            st.sidebar.metric("24h Trades", len(recent_trades))
+        else:
+            st.sidebar.metric("24h Trades", 0)
+    except Exception as e:
+        st.sidebar.metric("24h Trades", "Error")
+        st.sidebar.caption(f"Trade Log Error: {str(e)[:50]}...")
         
     # Get MT5 balance
     try:
@@ -925,33 +958,46 @@ def render_sidebar():
             if account_info:
                 current_balance = account_info.balance
                 st.sidebar.metric("Current Balance", f"${current_balance:.2f}")
+            else:
+                st.sidebar.metric("Current Balance", "N/A")
             mt5.shutdown()
-    except:
-        st.sidebar.metric("Current Balance", "N/A")
+        else:
+            st.sidebar.metric("Current Balance", "MT5 Not Connected")
+    except Exception as e:
+        st.sidebar.metric("Current Balance", "Error")
+        st.sidebar.caption(f"MT5 Error: {str(e)[:50]}...")
     
     # Calculate quick performance metrics
-    if not trade_log.empty and 'profit' in trade_log.columns:
-        win_rate = len(trade_log[trade_log['profit'] > 0]) / len(trade_log) * 100
-        avg_trade = trade_log['profit'].mean()
-        
-        st.sidebar.metric("Win Rate", f"{win_rate:.1f}%")
-        st.sidebar.metric("Avg Trade", f"${avg_trade:.2f}")
-        
-        # Recent performance (last 7 days)
-        recent_trades_7d = log_processor.get_recent_entries(trade_log, 168)  # 7 days
-        if not recent_trades_7d.empty and 'profit' in recent_trades_7d.columns:
-            recent_profit = recent_trades_7d['profit'].sum()
-            st.sidebar.metric("7d P&L", f"${recent_profit:.2f}")
+    try:
+        if not trade_log.empty and 'profit' in trade_log.columns:
+            win_rate = len(trade_log[trade_log['profit'] > 0]) / len(trade_log) * 100
+            avg_trade = trade_log['profit'].mean()
+            
+            st.sidebar.metric("Win Rate", f"{win_rate:.1f}%")
+            st.sidebar.metric("Avg Trade", f"${avg_trade:.2f}")
+            
+            # Recent performance (last 7 days)
+            recent_trades_7d = log_processor.get_recent_entries(trade_log, 168)  # 7 days
+            if not recent_trades_7d.empty and 'profit' in recent_trades_7d.columns:
+                recent_profit = recent_trades_7d['profit'].sum()
+                st.sidebar.metric("7d P&L", f"${recent_profit:.2f}")
+    except Exception as e:
+        st.sidebar.metric("Performance", "Error")
+        st.sidebar.caption(f"Metrics Error: {str(e)[:50]}...")
     
     # Config backups
     st.sidebar.subheader("💾 Backups")
-    backups = config_manager.get_backup_list()
-    if backups:
-        st.sidebar.write(f"Available: {len(backups)} backups")
-        if st.sidebar.button("📂 View Backups"):
-            st.session_state.show_backups = True
-    else:
-        st.sidebar.write("No backups available")
+    try:
+        backups = config_manager.get_backup_list()
+        if backups:
+            st.sidebar.write(f"Available: {len(backups)} backups")
+            if st.sidebar.button("📂 View Backups"):
+                st.session_state.show_backups = True
+        else:
+            st.sidebar.write("No backups available")
+    except Exception as e:
+        st.sidebar.write("Backups: Error")
+        st.sidebar.caption(f"Backup Error: {str(e)[:50]}...")
     
     st.sidebar.markdown("---")
     st.sidebar.markdown("**Version:** Internal Beta v1.0")
@@ -1026,11 +1072,16 @@ def main():
         # Import and render the comprehensive analytics dashboard
         try:
             from analytics_dashboard import AnalyticsDashboard
+            # Clear cache for real-time updates
+            st.cache_data.clear()
             dashboard = AnalyticsDashboard()
             dashboard.render_dashboard()
         except ImportError as e:
             st.error(f"Could not load analytics dashboard: {e}")
             st.info("Please ensure analytics_dashboard.py is in the GUI Components directory")
+        except Exception as e:
+            st.error(f"Analytics dashboard error: {e}")
+            st.info("The analytics dashboard encountered an error. Check the logs for details.")
     
     # Handle backup modal
     if st.session_state.get('show_backups', False):

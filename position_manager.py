@@ -10,6 +10,9 @@ import json
 # State file for tracking 4PM closure
 FOUR_PM_STATE_FILE = "four_pm_closure_state.json"
 
+# State file for tracking partial close equity cycle
+PARTIAL_CLOSE_CYCLE_FILE = "partial_close_cycle_state.json"
+
 def load_four_pm_state():
     """Load 4PM closure state"""
     try:
@@ -32,11 +35,77 @@ def save_four_pm_state():
     except Exception as e:
         print(f"⚠️ Failed to save 4PM state: {e}")
 
+def load_partial_close_cycle_state():
+    """Load partial close equity cycle state"""
+    try:
+        if os.path.exists(PARTIAL_CLOSE_CYCLE_FILE):
+            with open(PARTIAL_CLOSE_CYCLE_FILE, "r") as f:
+                return json.load(f)
+    except Exception as e:
+        print(f"⚠️ Failed to load partial close cycle state: {e}")
+    return {
+        "partial_close_triggered": False,
+        "triggered_at": None,
+        "session_date": None
+    }
+
+def save_partial_close_cycle_state(triggered=True):
+    """Save partial close equity cycle state"""
+    try:
+        state = {
+            "partial_close_triggered": triggered,
+            "triggered_at": datetime.now().isoformat() if triggered else None,
+            "session_date": datetime.now().strftime("%Y-%m-%d")
+        }
+        with open(PARTIAL_CLOSE_CYCLE_FILE, "w") as f:
+            json.dump(state, f)
+        if triggered:
+            print(f"📝 Partial close cycle state saved - triggered at {datetime.now().strftime('%H:%M:%S')}")
+    except Exception as e:
+        print(f"⚠️ Failed to save partial close cycle state: {e}")
+
+def reset_partial_close_cycle_if_needed():
+    """Reset partial close cycle if all trades are closed or new session"""
+    try:
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        cycle_state = load_partial_close_cycle_state()
+        
+        # Reset if it's a new session date
+        if cycle_state.get("session_date") != current_date:
+            print(f"🔄 New session date detected. Resetting partial close cycle.")
+            save_partial_close_cycle_state(triggered=False)
+            return True
+        
+        # Reset if no open positions (all trades closed)
+        positions = mt5.positions_get()
+        if not positions and cycle_state.get("partial_close_triggered", False):
+            print(f"🔄 All trades closed. Resetting partial close cycle.")
+            save_partial_close_cycle_state(triggered=False)
+            return True
+        
+        return False
+        
+    except Exception as e:
+        print(f"⚠️ Error checking partial close cycle reset: {e}")
+        return False
 
 def check_for_partial_close():
-
+    """
+    Check if partial close should be triggered (once per equity cycle)
+    """
     if not mt5.terminal_info():
         print("⚠️ MT5 not initialized. Skipping partial close.")
+        return
+
+    # Check if we need to reset the cycle
+    reset_partial_close_cycle_if_needed()
+
+    # Load current cycle state
+    cycle_state = load_partial_close_cycle_state()
+    
+    # If partial close already triggered this cycle, skip
+    if cycle_state.get("partial_close_triggered", False):
+        print("🔄 Partial close already triggered this equity cycle. Skipping.")
         return
 
     acc_info = mt5.account_info()
@@ -58,6 +127,9 @@ def check_for_partial_close():
 
     if total_floating_profit >= profit_threshold:
         print(f"🎯 Floating PnL ≥ {threshold_percent}% — closing 50% and setting SL to breakeven...")
+        
+        # Mark that partial close has been triggered this cycle
+        save_partial_close_cycle_state(triggered=True)
 
         for pos in positions:
             symbol = pos.symbol
@@ -90,7 +162,7 @@ def check_for_partial_close():
                     "position": ticket,
                     "price": price,
                     "deviation": 10,
-                    "type_filling": mt5.ORDER_FILLING_IOC,
+                    "type_filling": mt5.ORDER_FILLING_IOC
                 })
                 if result_close.retcode == mt5.TRADE_RETCODE_DONE:
                     print(f"✅ Closed 50% of {symbol} @ {price}")

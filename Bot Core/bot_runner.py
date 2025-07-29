@@ -230,7 +230,11 @@ def run_bot():
                 print(f"\n⏳ Analyzing {symbol}...")
 
                 # Check news protection before analysis
-                if should_block_trading():
+                from news_guard import is_trade_blocked_by_news, get_high_impact_news
+                news_events = get_high_impact_news()
+                now = datetime.now()
+                
+                if is_trade_blocked_by_news(symbol, news_events, now):
                     print(f"🚫 Skipping {symbol} — news protection active")
                     # Log missed trade reason
                     log_entry = {
@@ -467,20 +471,28 @@ def run_bot():
             
             # Update heartbeat for GUI status monitoring (ALWAYS update, even if no trades)
             try:
+                # Update both locations to ensure GUI can find it
+                heartbeat_data = {
+                    "last_heartbeat": datetime.now().isoformat(),
+                    "bot_status": "running",
+                    "current_symbols": SYMBOLS,
+                    "loop_count": loop_count + 1,
+                    "last_analysis": now.isoformat(),
+                    "mt5_connected": bool(mt5.terminal_info()),
+                    "news_protection_active": should_block_trading(),
+                    "current_hour": now.hour,
+                    "trading_window_active": current_config.get("restrict_usd_to_am", False)
+                }
+                
+                # Update Bot Core location
                 with open("bot_heartbeat.json", "w") as f:
-                    heartbeat_data = {
-                        "last_heartbeat": datetime.now().isoformat(),
-                        "bot_status": "running",
-                        "current_symbols": SYMBOLS,
-                        "loop_count": loop_count + 1,
-                        "last_analysis": now.isoformat(),
-                        "mt5_connected": bool(mt5.terminal_info()),
-                        "news_protection_active": should_block_trading(),
-                        "current_hour": now.hour,
-                        "trading_window_active": current_config.get("restrict_usd_to_am", False)
-                    }
                     json.dump(heartbeat_data, f)
-                    print(f"✅ Heartbeat updated at {now.strftime('%H:%M:%S')}")
+                
+                # Also update root location for GUI
+                with open("../bot_heartbeat.json", "w") as f:
+                    json.dump(heartbeat_data, f)
+                    
+                print(f"✅ Heartbeat updated at {now.strftime('%H:%M:%S')}")
             except Exception as e:
                 print(f"⚠️ Failed to update heartbeat: {e}")
             
@@ -489,6 +501,18 @@ def run_bot():
                 print("\n📊 Generating performance report...")
                 report = performance_metrics.generate_performance_report()
                 print("✅ Performance report generated")
+            
+            # Refresh news data daily (at midnight)
+            if now.hour == 0 and now.minute < 5:
+                print("\n📰 Refreshing news data from Forex Factory...")
+                try:
+                    from news_guard import refresh_news_data
+                    if refresh_news_data():
+                        print("✅ News data refreshed successfully")
+                    else:
+                        print("⚠️ News data refresh failed")
+                except Exception as e:
+                    print(f"❌ Error refreshing news data: {e}")
             
             loop_count += 1
             print(f"⏲ Waiting {DELAY_SECONDS / 60} minutes...")
