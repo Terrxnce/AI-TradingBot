@@ -146,7 +146,9 @@ class LogProcessor:
             filtered_df = filtered_df[filtered_df['timestamp'] >= pd.to_datetime(filters['start_date'])]
         
         if 'end_date' in filters and filters['end_date']:
-            filtered_df = filtered_df[filtered_df['timestamp'] <= pd.to_datetime(filters['end_date'])]
+            # Include the full end date by adding 1 day
+            end_datetime = pd.to_datetime(filters['end_date']) + pd.Timedelta(days=1)
+            filtered_df = filtered_df[filtered_df['timestamp'] < end_datetime]
         
         # Symbol filter
         if 'symbols' in filters and filters['symbols']:

@@ -262,6 +262,7 @@ def run_bot():
                         end = time_window.get("end_hour", 11)
                         if not (start <= current_hour < end):
                             print(f"⏳ Skipping {symbol} — outside {start}:00–{end}:00 window for USD-related pairs.")
+                            print(f"🕐 Current hour: {current_hour}, Window: {start}:00-{end}:00")
                             # Log missed trade reason
                             log_entry = {
                                 "timestamp": datetime.now().isoformat(),
@@ -464,7 +465,7 @@ def run_bot():
             apply_trailing_stop(minutes=30, trail_pips=20)
             check_for_partial_close()
             
-            # Update heartbeat for GUI status monitoring
+            # Update heartbeat for GUI status monitoring (ALWAYS update, even if no trades)
             try:
                 with open("bot_heartbeat.json", "w") as f:
                     heartbeat_data = {
@@ -474,9 +475,12 @@ def run_bot():
                         "loop_count": loop_count + 1,
                         "last_analysis": now.isoformat(),
                         "mt5_connected": bool(mt5.terminal_info()),
-                        "news_protection_active": should_block_trading()
+                        "news_protection_active": should_block_trading(),
+                        "current_hour": now.hour,
+                        "trading_window_active": current_config.get("restrict_usd_to_am", False)
                     }
                     json.dump(heartbeat_data, f)
+                    print(f"✅ Heartbeat updated at {now.strftime('%H:%M:%S')}")
             except Exception as e:
                 print(f"⚠️ Failed to update heartbeat: {e}")
             

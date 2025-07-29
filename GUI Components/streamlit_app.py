@@ -53,6 +53,10 @@ except ImportError:
         class DummyPerformanceMetrics:
             def generate_performance_report(self):
                 return {'overall_metrics': {}}
+            def get_mt5_account_balance(self):
+                return 10000 # Default balance for dummy
+            def get_mt5_account_equity(self):
+                return 10000 # Default equity for dummy
         performance_metrics = DummyPerformanceMetrics()
 
 import time
@@ -114,7 +118,7 @@ def load_mt5_positions():
         st.error(f"Error loading MT5 positions: {e}")
         return pd.DataFrame()
 
-@st.cache_data(ttl=60)  # Cache for 1 minute
+@st.cache_data(ttl=10)  # Cache for 10 seconds
 def load_bot_heartbeat():
     """Load bot heartbeat data"""
     try:
@@ -135,13 +139,14 @@ def load_bot_heartbeat():
         return None
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
-def load_mt5_trade_history(days=7):
+def load_mt5_trade_history(days=30):
     """Load MT5 trade history"""
     try:
         if not mt5.initialize():
             return pd.DataFrame()
         
-        utc_from = datetime.now() - timedelta(days=days)
+        # Get more history to ensure we capture all trades
+        utc_from = datetime(2025, 7, 21)  # From July 21st
         utc_to = datetime.now()
         deals = mt5.history_deals_get(utc_from, utc_to)
         mt5.shutdown()
@@ -153,10 +158,73 @@ def load_mt5_trade_history(days=7):
         deals_df = deals_df[["symbol", "time", "type", "volume", "price", "profit"]]
         deals_df["time"] = pd.to_datetime(deals_df["time"], unit="s")
         deals_df["type"] = deals_df["type"].apply(lambda x: "BUY" if x == 0 else "SELL")
+        
+        # Sort by time (newest first)
+        deals_df = deals_df.sort_values('time', ascending=False)
+        
         return deals_df
     except Exception as e:
         st.error(f"Error loading MT5 trade history: {e}")
         return pd.DataFrame()
+
+def sync_trade_log_with_mt5():
+    """Sync CSV trade log with MT5 history to show all trades"""
+    try:
+        if not mt5.initialize():
+            return False
+        
+        # Get all deals from July 21st onwards
+        utc_from = datetime(2025, 7, 21)
+        utc_to = datetime.now()
+        deals = mt5.history_deals_get(utc_from, utc_to)
+        mt5.shutdown()
+
+        if not deals:
+            return False
+
+        # Convert to DataFrame
+        deals_df = pd.DataFrame(list(deals), columns=deals[0]._asdict().keys())
+        
+        # Filter for USDJPY trades only and exclude non-trade deals
+        # Only include deals with type 0 (BUY) or 1 (SELL) - actual trades
+        usdjpy_trades = deals_df[
+            (deals_df['symbol'] == 'USDJPY') & 
+            (deals_df['type'].isin([0, 1]))  # Only BUY/SELL trades
+        ].copy()
+        
+        if usdjpy_trades.empty:
+            return False
+        
+        # Format for CSV trade log
+        trade_log_data = []
+        for _, deal in usdjpy_trades.iterrows():
+            trade_data = {
+                "timestamp": pd.to_datetime(deal['time'], unit='s'),
+                "symbol": deal['symbol'],
+                "direction": "BUY" if deal['type'] == 0 else "SELL",
+                "lot": deal['volume'],
+                "sl": 0,  # MT5 doesn't provide SL/TP in deals
+                "tp": 0,
+                "entry_price": deal['price'],
+                "result": "EXECUTED"  # All historical deals are executed
+            }
+            trade_log_data.append(trade_data)
+        
+        # Create DataFrame and save to CSV
+        trade_log_df = pd.DataFrame(trade_log_data)
+        trade_log_df = trade_log_df.sort_values('timestamp', ascending=False)
+        
+        # Save to the correct path
+        log_path = os.path.join(os.path.dirname(__file__), "..", "Bot Core", "logs", "trade_log.csv")
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        trade_log_df.to_csv(log_path, index=False)
+        
+        print(f"✅ Synced {len(trade_log_df)} trades from MT5")
+        return True
+        
+    except Exception as e:
+        st.error(f"Error syncing trade log: {e}")
+        return False
 
 def render_config_editor():
     """Render the configuration editor section"""
@@ -385,6 +453,16 @@ def render_trade_logs():
     with tab1:
         st.subheader("CSV Trade Log")
         
+        # Add sync button
+        if st.button("🔄 Sync with MT5", key="sync_trades"):
+            if sync_trade_log_with_mt5():
+                st.success("✅ Trade log synced with MT5 data!")
+                st.rerun()
+            else:
+                st.error("❌ Failed to sync trade log")
+        
+        csv_trades = log_processor.load_trade_log()
+        
         if not csv_trades.empty:
             # Filters
             col1, col2, col3, col4 = st.columns(4)
@@ -464,21 +542,44 @@ def render_trade_logs():
     
     with tab2:
         st.subheader("Live MT5 Trade History")
+        st.info("Note: This shows all MT5 deals (including non-trade transactions)")
+        
+        # Get actual MT5 account balance
+        mt5_balance = performance_metrics.get_mt5_account_balance()
         
         if not mt5_trades.empty:
-            st.dataframe(mt5_trades, use_container_width=True)
+            # Filter for actual trades only (BUY/SELL)
+            actual_trades = mt5_trades[mt5_trades['type'].isin(['BUY', 'SELL'])]
+            
+            # Filter for USDJPY trades only for display
+            usdjpy_trades = actual_trades[actual_trades['symbol'] == 'USDJPY']
+            
+            st.dataframe(usdjpy_trades, use_container_width=True)
             
             # Quick stats
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                st.metric("Total Deals", len(mt5_trades))
+                st.metric("Total Trades", len(usdjpy_trades))
+            
             with col2:
-                total_profit = mt5_trades['profit'].sum()
-                st.metric("Total P&L", f"${total_profit:.2f}")
+                # Show actual account balance instead of calculated P&L
+                if mt5_balance is not None:
+                    st.metric("Account Balance", f"${mt5_balance:.2f}")
+                else:
+                    st.metric("Account Balance", "N/A")
+            
             with col3:
-                avg_volume = mt5_trades['volume'].mean()
+                avg_volume = usdjpy_trades['volume'].mean() if not usdjpy_trades.empty else 0
                 st.metric("Avg Volume", f"{avg_volume:.2f}")
+            
+            with col4:
+                # Show most recent trade
+                if not usdjpy_trades.empty:
+                    latest_trade = usdjpy_trades.iloc[0]  # Already sorted by time
+                    st.metric("Latest Trade", f"{latest_trade['symbol']} {latest_trade['type']}")
+                else:
+                    st.metric("Latest Trade", "N/A")
         else:
             st.info("No MT5 trade history available")
     
@@ -602,6 +703,28 @@ def render_analytics():
     """Render analytics and matching section"""
     st.header("📈 Performance Analytics")
     
+    # Add sync button for trade data
+    col1, col2, col3 = st.columns([2, 1, 1])
+    with col1:
+        if st.button("🔄 Refresh Performance Metrics", key="refresh_metrics"):
+            st.cache_data.clear()
+    with col2:
+        if st.button("📊 Sync Trade Data", key="sync_analytics"):
+            if sync_trade_log_with_mt5():
+                st.success("✅ Trade data synced!")
+                st.rerun()
+            else:
+                st.error("❌ Failed to sync trade data")
+    with col3:
+        if st.button("🔄 Force MT5 Refresh", key="force_mt5_refresh"):
+            st.cache_data.clear()
+            st.success("✅ MT5 data refreshed! Reloading...")
+            st.rerun()
+    
+    # Load data at the beginning
+    ai_log = log_processor.load_ai_decision_log()
+    trade_log = log_processor.load_trade_log()
+    
     # Generate performance report
     if st.button("🔄 Refresh Performance Metrics"):
         st.cache_data.clear()
@@ -615,9 +738,6 @@ def render_analytics():
             st.info("No performance data available. Run some trades first!")
             
             # Fallback to basic analytics
-            ai_log = log_processor.load_ai_decision_log()
-            trade_log = log_processor.load_trade_log()
-            
             if ai_log.empty and trade_log.empty:
                 st.info("No data available for analytics")
                 return
@@ -660,19 +780,27 @@ def render_analytics():
         
         with col1:
             st.metric("Total Trades", overall_metrics.get('total_trades', 0))
-            st.metric("Win Rate", f"{overall_metrics.get('win_rate', 0):.1%}")
+            st.metric("Executed Trades", overall_metrics.get('executed_trades', 0))
         
         with col2:
-            st.metric("Total Profit", f"${overall_metrics.get('total_profit', 0):.2f}")
-            st.metric("Avg Trade", f"${overall_metrics.get('average_trade', 0):.2f}")
+            execution_rate = overall_metrics.get('execution_rate', 0)
+            st.metric("Execution Rate", f"{execution_rate * 100:.1f}%")
+            st.metric("Avg Lot Size", f"{overall_metrics.get('avg_lot_size', 0):.2f}")
         
         with col3:
-            st.metric("Profit Factor", f"{overall_metrics.get('profit_factor', 0):.2f}")
-            st.metric("Max Drawdown", f"{overall_metrics.get('max_drawdown', 0):.1%}")
+            st.metric("Most Traded Symbol", overall_metrics.get('most_traded_symbol', 'N/A'))
+            st.metric("Most Active Session", overall_metrics.get('most_active_session', 'N/A'))
         
         with col4:
-            st.metric("Sharpe Ratio", f"{overall_metrics.get('sharpe_ratio', 0):.2f}")
-            st.metric("Risk-Adjusted Return", f"{overall_metrics.get('risk_adjusted_return', 0):.2f}")
+            # Calculate actual P&L from trade data
+            if not trade_log.empty and 'profit' in trade_log.columns:
+                total_pnl = trade_log['profit'].sum()
+                win_rate = len(trade_log[trade_log['profit'] > 0]) / len(trade_log) * 100 if len(trade_log) > 0 else 0
+                st.metric("Total P&L", f"${total_pnl:.2f}")
+                st.metric("Win Rate", f"{win_rate:.1f}%")
+            else:
+                st.metric("Total P&L", "$0.00")
+                st.metric("Win Rate", "0.0%")
         
         # Additional performance insights
         st.subheader("📈 Performance Insights")
@@ -682,28 +810,51 @@ def render_analytics():
         
         with col1:
             # Last 7 days performance
-            if 'daily_metrics' in report and report['daily_metrics']:
-                recent_days = list(report['daily_metrics'].keys())[-7:]
-                recent_profit = sum(report['daily_metrics'][day]['profit'] for day in recent_days if day in report['daily_metrics'])
-                st.metric("7-Day P&L", f"${recent_profit:.2f}")
+            if not trade_log.empty and 'profit' in trade_log.columns:
+                seven_days_ago = datetime.now() - timedelta(days=7)
+                recent_trades = trade_log[trade_log['timestamp'] >= seven_days_ago]
+                recent_pnl = recent_trades['profit'].sum()
+                st.metric("7-Day P&L", f"${recent_pnl:.2f}")
+            else:
+                st.metric("7-Day P&L", "$0.00")
         
         with col2:
-            # Average trade duration (if available)
-            if not trade_log.empty and 'timestamp' in trade_log.columns:
-                st.metric("Total Trades", len(trade_log))
+            # Total volume traded
+            if not trade_log.empty:
+                if 'volume' in trade_log.columns:
+                    total_volume = trade_log['volume'].sum()
+                elif 'lot' in trade_log.columns:
+                    total_volume = trade_log['lot'].sum()
+                else:
+                    total_volume = 0
+                st.metric("Total Volume", f"{total_volume:.2f}")
+            else:
+                st.metric("Total Volume", "0.00")
         
         with col3:
             # Best performing symbol
-            if 'symbol_metrics' in report and report['symbol_metrics']:
-                best_symbol = max(report['symbol_metrics'].items(), key=lambda x: x[1]['profit'])
-                st.metric("Best Symbol", f"{best_symbol[0]} (${best_symbol[1]['profit']:.2f})")
+            if not trade_log.empty and 'profit' in trade_log.columns and 'symbol' in trade_log.columns:
+                symbol_performance = trade_log.groupby('symbol')['profit'].sum()
+                if not symbol_performance.empty:
+                    best_symbol = symbol_performance.idxmax()
+                    best_pnl = symbol_performance.max()
+                    st.metric("Best Symbol", f"{best_symbol} (${best_pnl:.2f})")
+                else:
+                    st.metric("Best Symbol", "N/A")
+            else:
+                st.metric("Best Symbol", "N/A")
         
         # Symbol performance
         st.subheader("📈 Symbol Performance")
         symbol_metrics = report.get('symbol_metrics', {})
+        
         if symbol_metrics:
             symbol_df = pd.DataFrame.from_dict(symbol_metrics, orient='index')
+            symbol_df = symbol_df.reset_index()
+            symbol_df.columns = ['Symbol', 'Trades', 'Profit', 'Win Rate', 'Avg Trade']
             st.dataframe(symbol_df, use_container_width=True)
+        else:
+            st.info("No symbol performance data available")
         
         # Session performance
         st.subheader("🕐 Session Performance")
@@ -712,40 +863,143 @@ def render_analytics():
             session_df = pd.DataFrame.from_dict(session_metrics, orient='index')
             st.dataframe(session_df, use_container_width=True)
         
-        # Daily metrics chart
+        # Daily performance chart
         st.subheader("📅 Daily Performance")
-        daily_metrics = report.get('daily_metrics', {})
-        if daily_metrics:
-            daily_df = pd.DataFrame.from_dict(daily_metrics, orient='index')
-            daily_df.index = pd.to_datetime(daily_df.index)
-            daily_df = daily_df.sort_index()
+        
+        # Get actual MT5 account balance and equity
+        mt5_balance = performance_metrics.get_mt5_account_balance()
+        mt5_equity = performance_metrics.get_mt5_account_equity()
+        
+        if mt5_balance is not None:
+            print(f"✅ MT5 Account Balance: ${mt5_balance:.2f}")
+            print(f"✅ MT5 Account Equity: ${mt5_equity:.2f}")
             
+            # Create a simple daily performance chart using actual MT5 data
+            # Since we can't get historical balance data easily, we'll show current vs initial
+            initial_balance = 10000  # Starting balance
+            current_balance = mt5_balance
+            current_equity = mt5_equity if mt5_equity is not None else mt5_balance
+            
+            # Create the chart similar to the screenshot
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=daily_df.index, y=daily_df['profit'], 
-                                   mode='lines+markers', name='Daily Profit'))
-            fig.update_layout(title="Daily Profit/Loss", xaxis_title="Date", yaxis_title="Profit ($)")
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # AI Decision vs Trade Matching (existing functionality)
-        st.subheader("🔄 AI Decision vs Trade Matching")
-        ai_log = log_processor.load_ai_decision_log()
-        trade_log = log_processor.load_trade_log()
-        
-        if not ai_log.empty and not trade_log.empty:
-            tolerance = st.slider("Matching Tolerance (minutes)", 1, 60, 5)
-            matched_data = log_processor.match_ai_with_trades(ai_log, trade_log, tolerance)
             
-            if not matched_data.empty:
-                match_rate = (matched_data['trade_matched'].sum() / len(matched_data)) * 100
-                st.metric("Match Rate", f"{match_rate:.1f}%")
-                
-                # Show matched decisions
-                matched_only = matched_data[matched_data['trade_matched'] == True]
-                if not matched_only.empty:
-                    st.subheader("✅ Matched Decisions")
-                    st.dataframe(matched_only[['timestamp', 'symbol', 'ai_decision', 'confidence', 
-                                             'trade_price', 'trade_lot', 'reasoning']], 
-                               use_container_width=True)
+            # Add current balance point (green)
+            fig.add_trace(go.Scatter(
+                x=[datetime.now().date()],
+                y=[current_balance],
+                mode='markers+text',
+                name='Current Balance',
+                line=dict(color='lightgreen', width=2),
+                marker=dict(color='lightgreen', size=12),
+                text=[f"${current_balance:.2f}"],
+                textposition="top center"
+            ))
+            
+            # Add current equity point (blue)
+            fig.add_trace(go.Scatter(
+                x=[datetime.now().date()],
+                y=[current_equity],
+                mode='markers+text',
+                name='Current Equity',
+                line=dict(color='lightblue', width=2),
+                marker=dict(color='lightblue', size=12),
+                text=[f"${current_equity:.2f}"],
+                textposition="bottom center"
+            ))
+            
+            # Add initial balance line (dashed)
+            fig.add_hline(
+                y=initial_balance,
+                line_dash="dash",
+                line_color="gray",
+                annotation_text=f"Initial Balance: ${initial_balance:.2f}",
+                annotation_position="left"
+            )
+            
+            # Add profit target line (horizontal green line)
+            profit_target = 11000  # You can adjust this
+            fig.add_hline(
+                y=profit_target,
+                line_dash="solid",
+                line_color="green",
+                annotation_text="Profit Target",
+                annotation_position="top right"
+            )
+            
+            # Add max loss limit line (horizontal red line)
+            max_loss_limit = 9000  # You can adjust this
+            fig.add_hline(
+                y=max_loss_limit,
+                line_dash="solid",
+                line_color="red",
+                annotation_text="Max Loss Limit",
+                annotation_position="bottom right"
+            )
+            
+            # Update layout
+            fig.update_layout(
+                title="Account Performance (Live MT5 Data)",
+                xaxis_title="Date",
+                yaxis_title="Amount (USD)",
+                hovermode='x unified',
+                showlegend=True,
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                )
+            )
+            
+            # Update y-axis to show proper range
+            min_balance = min(current_balance, current_equity, max_loss_limit)
+            max_balance = max(current_balance, current_equity, profit_target)
+            fig.update_yaxes(range=[min_balance - 100, max_balance + 100])
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Show key metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                total_pnl = current_balance - initial_balance
+                st.metric("Total P&L", f"${total_pnl:.2f}")
+            with col2:
+                st.metric("Current Balance", f"${current_balance:.2f}")
+            with col3:
+                if mt5_equity is not None:
+                    equity_diff = current_equity - current_balance
+                    st.metric("Equity Difference", f"${equity_diff:.2f}")
+                else:
+                    st.metric("Current Equity", "N/A")
+            with col4:
+                profit_percentage = (total_pnl / initial_balance) * 100
+                st.metric("Profit %", f"{profit_percentage:.2f}%")
+            
+            # Show account summary
+            st.subheader("📊 Account Summary")
+            summary_data = {
+                "Metric": ["Initial Balance", "Current Balance", "Total P&L", "Profit %", "Current Equity"],
+                "Value": [
+                    f"${initial_balance:.2f}",
+                    f"${current_balance:.2f}",
+                    f"${total_pnl:.2f}",
+                    f"{profit_percentage:.2f}%",
+                    f"${current_equity:.2f}" if mt5_equity is not None else "N/A"
+                ]
+            }
+            st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
+            
+        else:
+            st.error("❌ Could not fetch MT5 account data")
+            
+        # Also show trade-based P&L for comparison
+        if not trade_log.empty and 'profit' in trade_log.columns:
+            st.subheader("📈 Trade-Based P&L (For Reference)")
+            trade_pnl = trade_log['profit'].sum()
+            st.info(f"Trade-based P&L: ${trade_pnl:.2f} (excludes commissions/swaps)")
+            st.info(f"MT5 Account P&L: ${mt5_balance - 10000:.2f} (includes all fees)")
+            st.info(f"Difference: ${(mt5_balance - 10000) - trade_pnl:.2f} (commissions/swaps)")
         
     except Exception as e:
         st.error(f"Error loading performance metrics: {e}")
@@ -758,6 +1012,22 @@ def render_sidebar():
     
     # Bot Status with Heartbeat
     st.sidebar.subheader("🔋 Live Bot Status")
+    
+    # Add refresh button
+    if st.sidebar.button("🔄 Refresh Status", key="refresh_status"):
+        st.cache_data.clear()
+        st.rerun()
+    
+    # Debug: Show heartbeat file info
+    try:
+        import os
+        heartbeat_file = "bot_heartbeat.json"
+        if os.path.exists(heartbeat_file):
+            file_time = os.path.getmtime(heartbeat_file)
+            file_time_str = datetime.fromtimestamp(file_time).strftime("%H:%M:%S")
+            st.sidebar.caption(f"File modified: {file_time_str}")
+    except:
+        pass
     
     # Load heartbeat data
     heartbeat_data = load_bot_heartbeat()
@@ -790,12 +1060,27 @@ def render_sidebar():
             try:
                 last_time = datetime.fromisoformat(last_heartbeat.replace('Z', '+00:00'))
                 time_diff = datetime.now() - last_time.replace(tzinfo=None)
-                if time_diff.total_seconds() < 300:  # 5 minutes
-                    st.sidebar.success(f"🟢 Last update: {time_diff.seconds//60}m ago")
+                minutes_ago = int(time_diff.total_seconds() // 60)
+                
+                # Show more detailed time information
+                if minutes_ago < 1:
+                    st.sidebar.success(f"🟢 Last update: Just now")
+                elif minutes_ago < 5:
+                    st.sidebar.success(f"🟢 Last update: {minutes_ago}m ago")
+                elif minutes_ago < 15:
+                    st.sidebar.info(f"🟡 Last update: {minutes_ago}m ago")
+                elif minutes_ago < 30:
+                    st.sidebar.warning(f"🟠 Last update: {minutes_ago}m ago")
                 else:
-                    st.sidebar.warning(f"🟡 Last update: {time_diff.seconds//60}m ago")
-            except:
+                    st.sidebar.error(f"🔴 Last update: {minutes_ago}m ago")
+                    
+                # Show current time for reference
+                current_time = datetime.now().strftime("%H:%M:%S")
+                st.sidebar.caption(f"Current time: {current_time}")
+                
+            except Exception as e:
                 st.sidebar.write(f"Last update: {last_heartbeat}")
+                st.sidebar.caption(f"Error parsing time: {e}")
     else:
         st.sidebar.warning("⚠️ Bot Status Unknown")
         st.sidebar.write("No heartbeat data available")
@@ -803,13 +1088,24 @@ def render_sidebar():
     # Quick Performance Stats
     st.sidebar.subheader("📊 Quick Performance")
     
-    # Load recent data
+    # Load recent data with proper filtering
     ai_log = log_processor.load_ai_decision_log()
     trade_log = log_processor.load_trade_log()
     
-    if not ai_log.empty:
-        recent_decisions = log_processor.get_recent_entries(ai_log, 24)
+    # Calculate 24h AI decisions properly
+    if not ai_log.empty and 'timestamp' in ai_log.columns:
+        now = datetime.now()
+        yesterday = now - timedelta(hours=24)
+        
+        # Convert timestamp to datetime if it's string
+        if ai_log['timestamp'].dtype == 'object':
+            ai_log['timestamp'] = pd.to_datetime(ai_log['timestamp'])
+        
+        # Filter for last 24 hours
+        recent_decisions = ai_log[ai_log['timestamp'] >= yesterday]
         st.sidebar.metric("24h AI Decisions", len(recent_decisions))
+    else:
+        st.sidebar.metric("24h AI Decisions", 0)
     
     # Use MT5 trade history for accurate 24h trade count
     mt5_trades = load_mt5_trade_history(days=1)  # Get last 24 hours

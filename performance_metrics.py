@@ -96,19 +96,162 @@ class PerformanceMetrics:
         return total_return / volatility
     
     def load_trade_data(self):
-        """Load trade data from logs"""
+        """Load trade data from logs and MT5 history"""
         try:
-            # Load trade log
-            trade_log_path = "logs/trade_log.csv"
-            if os.path.exists(trade_log_path):
-                trades_df = pd.read_csv(trade_log_path)
-                trades_df['timestamp'] = pd.to_datetime(trades_df['timestamp'])
-                return trades_df
-            else:
+            # First try to load from CSV trade log
+            possible_paths = [
+                "logs/trade_log.csv",
+                "Bot Core/logs/trade_log.csv", 
+                "Data Files/trade_log.csv"
+            ]
+            
+            csv_trades = None
+            for trade_log_path in possible_paths:
+                if os.path.exists(trade_log_path):
+                    csv_trades = pd.read_csv(trade_log_path)
+                    csv_trades['timestamp'] = pd.to_datetime(csv_trades['timestamp'])
+                    print(f"✅ Loaded trade data from: {trade_log_path}")
+                    break
+            
+            if csv_trades is None:
+                print("⚠️ No trade log found in expected locations")
                 return pd.DataFrame()
+            
+            # Always get MT5 data to ensure we have profit information
+            print("🔄 Fetching MT5 trade history for profit data...")
+            mt5_trades = self._get_mt5_trade_history()
+            
+            if not mt5_trades.empty:
+                # Instead of trying to match, let's use MT5 data directly
+                # Filter for actual trades (BUY/SELL) with profit
+                actual_mt5_trades = mt5_trades[mt5_trades['profit'] != 0].copy()
+                
+                if not actual_mt5_trades.empty:
+                    print(f"✅ Found {len(actual_mt5_trades)} MT5 trades with profit data")
+                    
+                    # Create a clean trade log from MT5 data
+                    trade_data = []
+                    for _, trade in actual_mt5_trades.iterrows():
+                        trade_entry = {
+                            "timestamp": trade['timestamp'],
+                            "symbol": trade['symbol'],
+                            "direction": trade['direction'],
+                            "lot": trade['volume'],
+                            "sl": 0,  # MT5 doesn't provide SL/TP in deals
+                            "tp": 0,
+                            "entry_price": trade['price'],
+                            "profit": trade['profit'],
+                            "result": "EXECUTED"
+                        }
+                        trade_data.append(trade_entry)
+                    
+                    result_df = pd.DataFrame(trade_data)
+                    total_profit = result_df['profit'].sum()
+                    print(f"✅ Total P&L from MT5: ${total_profit:.2f}")
+                    
+                    return result_df
+                else:
+                    print("⚠️ No MT5 trades with profit data found")
+                    return csv_trades
+            else:
+                print("⚠️ No MT5 trade history available")
+                return csv_trades
+                
         except Exception as e:
             print(f"❌ Error loading trade data: {e}")
             return pd.DataFrame()
+    
+    def _get_mt5_trade_history(self):
+        """Get trade history from MT5"""
+        try:
+            import MetaTrader5 as mt5
+            if not mt5.initialize():
+                return pd.DataFrame()
+            
+            # Get all deals from July 21st onwards
+            utc_from = datetime(2025, 7, 21)
+            utc_to = datetime.now()
+            deals = mt5.history_deals_get(utc_from, utc_to)
+            mt5.shutdown()
+
+            if not deals:
+                return pd.DataFrame()
+
+            # Convert to DataFrame
+            deals_df = pd.DataFrame(list(deals), columns=deals[0]._asdict().keys())
+            
+            # Filter for USDJPY deals only
+            usdjpy_deals = deals_df[deals_df['symbol'] == 'USDJPY'].copy()
+            print(f"✅ Found {len(usdjpy_deals)} USDJPY deals in MT5")
+            
+            if not usdjpy_deals.empty:
+                usdjpy_deals['timestamp'] = pd.to_datetime(usdjpy_deals['time'], unit='s')
+                usdjpy_deals['direction'] = usdjpy_deals['type'].apply(lambda x: "BUY" if x == 0 else "SELL")
+                usdjpy_deals = usdjpy_deals.sort_values('timestamp', ascending=False)
+                
+                # Show the latest trades with profit
+                profitable_trades = usdjpy_deals[usdjpy_deals['profit'] != 0]
+                print(f"✅ Found {len(profitable_trades)} USDJPY trades with profit")
+                
+                if not profitable_trades.empty:
+                    print("🎯 Latest profitable trades:")
+                    for idx, trade in profitable_trades.head(5).iterrows():
+                        print(f"  {trade['timestamp']} | {trade['direction']} | Profit: ${trade['profit']:.2f}")
+                
+                return usdjpy_deals
+            
+            return pd.DataFrame()
+            
+        except Exception as e:
+            print(f"❌ Error getting MT5 trade history: {e}")
+            return pd.DataFrame()
+    
+    def _merge_with_mt5_data(self, csv_trades, mt5_trades):
+        """Merge CSV trade data with MT5 profit data"""
+        try:
+            if mt5_trades.empty:
+                print("⚠️ No MT5 trades to merge")
+                return csv_trades
+            
+            print(f"🔄 Merging {len(csv_trades)} CSV trades with {len(mt5_trades)} MT5 trades")
+            
+            # Create a merged dataframe with profit data
+            merged_trades = []
+            
+            for _, csv_trade in csv_trades.iterrows():
+                # Find matching MT5 trade by timestamp and direction
+                # Use a time tolerance of 5 minutes for matching
+                csv_time = csv_trade['timestamp']
+                time_tolerance = pd.Timedelta(minutes=5)
+                
+                matching_mt5 = mt5_trades[
+                    (abs(mt5_trades['timestamp'] - csv_time) <= time_tolerance) &
+                    (mt5_trades['direction'] == csv_trade['direction'])
+                ]
+                
+                if not matching_mt5.empty:
+                    mt5_trade = matching_mt5.iloc[0]
+                    trade_data = csv_trade.to_dict()
+                    trade_data['profit'] = mt5_trade['profit']
+                    trade_data['volume'] = mt5_trade['volume']
+                    merged_trades.append(trade_data)
+                    print(f"✅ Matched trade: {csv_trade['direction']} at {csv_time}, Profit: ${mt5_trade['profit']:.2f}")
+                else:
+                    # Keep original trade without profit data
+                    trade_data = csv_trade.to_dict()
+                    trade_data['profit'] = 0
+                    merged_trades.append(trade_data)
+                    print(f"⚠️ No MT5 match for: {csv_trade['direction']} at {csv_time}")
+            
+            result_df = pd.DataFrame(merged_trades)
+            total_profit = result_df['profit'].sum()
+            print(f"✅ Total P&L after merge: ${total_profit:.2f}")
+            
+            return result_df
+            
+        except Exception as e:
+            print(f"❌ Error merging trade data: {e}")
+            return csv_trades
     
     def calculate_daily_metrics(self, trades_df):
         """Calculate daily performance metrics"""
@@ -136,46 +279,82 @@ class PerformanceMetrics:
         if trades_df.empty:
             return {
                 'total_trades': 0,
+                'executed_trades': 0,
+                'execution_rate': 0,
                 'win_rate': 0,
                 'profit_factor': 0,
                 'average_trade': 0,
                 'total_profit': 0,
                 'max_drawdown': 0,
                 'sharpe_ratio': 0,
-                'risk_adjusted_return': 0
+                'risk_adjusted_return': 0,
+                'avg_lot_size': 0,
+                'most_traded_symbol': 'N/A',
+                'most_active_session': 'N/A'
             }
         
-        # Basic metrics
         total_trades = len(trades_df)
-        win_rate = self.calculate_win_rate(trades_df)
-        profit_factor = self.calculate_profit_factor(trades_df)
-        average_trade = self.calculate_average_trade(trades_df)
-        total_profit = trades_df['profit'].sum() if 'profit' in trades_df.columns else 0
         
-        # Calculate equity curve for drawdown
-        if 'profit' in trades_df.columns:
-            equity_curve = trades_df['profit'].cumsum() + FTMO_PARAMS['initial_balance']
-            max_drawdown = self.calculate_max_drawdown(equity_curve)
-            
-            # Calculate returns for Sharpe ratio
-            returns = trades_df['profit'] / FTMO_PARAMS['initial_balance']
-            sharpe_ratio = self.calculate_sharpe_ratio(returns)
-            risk_adjusted_return = self.calculate_risk_adjusted_return(trades_df, FTMO_PARAMS['initial_balance'])
+        # Execution metrics
+        executed_trades = trades_df[trades_df['result'] == 'EXECUTED'] if 'result' in trades_df.columns else trades_df
+        execution_rate = len(executed_trades) / total_trades if total_trades > 0 else 0
+        
+        # Symbol analysis
+        most_traded_symbol = trades_df['symbol'].mode().iloc[0] if 'symbol' in trades_df.columns and not trades_df['symbol'].empty else 'N/A'
+        
+        # Session analysis
+        if 'timestamp' in trades_df.columns:
+            trades_df['hour'] = trades_df['timestamp'].dt.hour
+            trades_df['session'] = trades_df['hour'].apply(self._get_session)
+            most_active_session = trades_df['session'].mode().iloc[0] if not trades_df['session'].empty else 'N/A'
         else:
-            max_drawdown = 0
-            sharpe_ratio = 0
-            risk_adjusted_return = 0
+            most_active_session = 'N/A'
+        
+        # Lot size analysis - use volume from MT5 if available
+        if 'volume' in trades_df.columns:
+            avg_lot_size = trades_df['volume'].mean()
+        elif 'lot' in trades_df.columns:
+            avg_lot_size = trades_df['lot'].mean()
+        else:
+            avg_lot_size = 0
+        
+        # Since we don't have profit data, set these to 0
+        win_rate = 0
+        profit_factor = 0
+        average_trade = 0
+        total_profit = 0
+        max_drawdown = 0
+        sharpe_ratio = 0
+        risk_adjusted_return = 0
         
         return {
             'total_trades': total_trades,
+            'executed_trades': len(executed_trades),
+            'execution_rate': execution_rate,
             'win_rate': win_rate,
             'profit_factor': profit_factor,
             'average_trade': average_trade,
             'total_profit': total_profit,
             'max_drawdown': max_drawdown,
             'sharpe_ratio': sharpe_ratio,
-            'risk_adjusted_return': risk_adjusted_return
+            'risk_adjusted_return': risk_adjusted_return,
+            'avg_lot_size': avg_lot_size,
+            'most_traded_symbol': most_traded_symbol,
+            'most_active_session': most_active_session
         }
+    
+    def _get_session(self, hour):
+        """Helper function to get session from hour"""
+        if 1 <= hour < 7:
+            return 'Asia'
+        elif 8 <= hour < 12:
+            return 'London'
+        elif 13 <= hour < 14:
+            return 'NY_PreMarket'
+        elif 14 <= hour < 20:
+            return 'New_York'
+        else:
+            return 'Post_Market'
     
     def calculate_symbol_performance(self, trades_df):
         """Calculate performance by symbol"""
@@ -279,6 +458,44 @@ class PerformanceMetrics:
 └── Risk-Adjusted Return: {metrics['risk_adjusted_return']:.2f}
 """
         return summary
+
+    def get_mt5_account_balance(self):
+        """Get current account balance directly from MT5"""
+        try:
+            import MetaTrader5 as mt5
+            if not mt5.initialize():
+                return None
+            
+            account_info = mt5.account_info()
+            mt5.shutdown()
+            
+            if account_info is None:
+                return None
+            
+            return account_info.balance
+            
+        except Exception as e:
+            print(f"❌ Error getting MT5 account balance: {e}")
+            return None
+    
+    def get_mt5_account_equity(self):
+        """Get current account equity directly from MT5"""
+        try:
+            import MetaTrader5 as mt5
+            if not mt5.initialize():
+                return None
+            
+            account_info = mt5.account_info()
+            mt5.shutdown()
+            
+            if account_info is None:
+                return None
+            
+            return account_info.equity
+            
+        except Exception as e:
+            print(f"❌ Error getting MT5 account equity: {e}")
+            return None
 
 # Global instance
 performance_metrics = PerformanceMetrics()
