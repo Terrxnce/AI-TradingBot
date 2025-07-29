@@ -82,8 +82,8 @@ def check_password():
         password = st.text_input("Enter Access Password:", type="password")
         
         if st.button("🚀 Access Dashboard"):
-            # TODO: Replace with your team password
-            if password == "devi2025beta":  # Change this password
+            # Secure team password for Cloudflare Tunnel access
+            if password == "devipass2025":  # Secure password for team access
                 st.session_state.authenticated = True
                 st.success("✅ Access Granted! Redirecting...")
                 time.sleep(1)
