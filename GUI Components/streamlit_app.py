@@ -605,405 +605,193 @@ def render_trade_logs():
             st.info("No open positions")
 
 def render_ai_decisions():
-    """Render the AI decisions section"""
-    st.header("🤖 AI Decision Analysis")
+    """Render AI decisions section"""
+    st.header("🤖 AI Decision Log")
     
-    # Load AI decision data
+    # Load AI decision log
     ai_log = log_processor.load_ai_decision_log()
     
     if ai_log.empty:
-        st.info("No AI decision log data available")
+        st.info("No AI decisions found. Start the bot to see AI analysis.")
         return
     
     # Filters
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # Symbol filter
+        symbols = ['All'] + sorted(ai_log['symbol'].unique().tolist())
+        selected_symbol = st.selectbox("Symbol", symbols, key="ai_symbol_filter")
+    
+    with col2:
+        # Decision filter
+        decisions = ['All'] + sorted(ai_log['ai_decision'].unique().tolist())
+        selected_decision = st.selectbox("Decision", decisions, key="ai_decision_filter")
+    
+    with col3:
+        # Date range filter
+        if 'timestamp' in ai_log.columns:
+            ai_log['timestamp'] = pd.to_datetime(ai_log['timestamp'])
+            min_date = ai_log['timestamp'].min().date()
+            max_date = ai_log['timestamp'].max().date()
+            date_range = st.date_input(
+                "Date Range",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date,
+                key="ai_date_filter"
+            )
+    
+    # Apply filters
+    filtered_log = ai_log.copy()
+    
+    if selected_symbol != 'All':
+        filtered_log = filtered_log[filtered_log['symbol'] == selected_symbol]
+    
+    if selected_decision != 'All':
+        filtered_log = filtered_log[filtered_log['ai_decision'] == selected_decision]
+    
+    if len(date_range) == 2 and 'timestamp' in filtered_log.columns:
+        start_date, end_date = date_range
+        if start_date and end_date:
+            filtered_log = filtered_log[
+                (filtered_log['timestamp'].dt.date >= start_date) &
+                (filtered_log['timestamp'].dt.date <= end_date)
+            ]
+    
+    # Display filtered data
+    if filtered_log.empty:
+        st.warning("No AI decisions found with current filters")
+        return
+    
+    # Show summary stats
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        symbols = log_processor.get_unique_symbols(ai_log)
-        selected_symbols = st.multiselect("Filter Symbols", symbols, key="ai_symbols")
+        total_decisions = len(filtered_log)
+        st.metric("Total Decisions", total_decisions)
     
     with col2:
-        decisions = ai_log['ai_decision'].unique().tolist() if 'ai_decision' in ai_log.columns else []
-        selected_decisions = st.multiselect("Filter Decisions", decisions, key="ai_decisions")
+        executed_trades = len(filtered_log[filtered_log['executed'] == True])
+        execution_rate = (executed_trades / total_decisions * 100) if total_decisions > 0 else 0
+        st.metric("Execution Rate", f"{execution_rate:.1f}%")
     
     with col3:
-        executed_only = st.checkbox("Executed Only", key="ai_executed")
+        if 'ai_confidence' in filtered_log.columns:
+            avg_confidence = filtered_log['ai_confidence'].apply(
+                lambda x: float(x) if str(x).replace('.', '').isdigit() else 0
+            ).mean()
+            st.metric("Avg Confidence", f"{avg_confidence:.1f}")
+        else:
+            st.metric("Avg Confidence", "N/A")
     
     with col4:
-        override_only = st.checkbox("AI Override Only", key="ai_override")
-    
-    # Date range
-    col1, col2 = st.columns(2)
-    with col1:
-        start_date = st.date_input("Start Date", value=datetime(2025, 7, 27).date(), key="ai_start")
-    with col2:
-        end_date = st.date_input("End Date", value=datetime.now().date(), key="ai_end")
-    
-    # Apply filters
-    filters = {
-        'symbols': selected_symbols,
-        'decisions': selected_decisions,
-        'executed_only': executed_only,
-        'override_only': override_only,
-        'start_date': start_date,
-        'end_date': end_date
-    }
-    
-    filtered_ai = log_processor.filter_ai_log(ai_log, **filters)
-    
-    # Display metrics
-    if not filtered_ai.empty:
-        metrics = log_processor.calculate_ai_metrics(filtered_ai)
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total Decisions", metrics.get('total_decisions', 0))
-        with col2:
-            execution_rate = metrics.get('execution_rate', 0)
-            st.metric("Execution Rate", f"{execution_rate:.1f}%")
-        with col3:
-            override_rate = metrics.get('override_rate', 0)
-            st.metric("Override Rate", f"{override_rate:.1f}%")
-        with col4:
-            avg_confidence = metrics.get('average_confidence', 0)
-            if avg_confidence:
-                st.metric("Avg Confidence", f"{avg_confidence:.1f}")
-            else:
-                st.metric("Avg Confidence", "N/A")
-        
-        # Decision distribution chart
-        if 'decision_distribution' in metrics:
-            decision_dist = metrics['decision_distribution']
-            if decision_dist:
-                fig = px.pie(values=list(decision_dist.values()), 
-                           names=list(decision_dist.keys()), 
-                           title="Decision Distribution")
-                st.plotly_chart(fig, use_container_width=True)
-        
-        # Display table
-        st.dataframe(filtered_ai, use_container_width=True)
-        
-        # Export options
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("📥 Export AI Log CSV", key="export_ai_csv"):
-                filename = f"ai_decisions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-                log_processor.export_to_csv(filtered_ai, filename)
-                st.success(f"✅ Exported to {filename}")
-        
-        with col2:
-            if st.button("📊 Export AI Log Excel", key="export_ai_excel"):
-                filename = f"ai_decisions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-                log_processor.export_to_excel(filtered_ai, filename)
-                st.success(f"✅ Exported to {filename}")
-    else:
-        st.warning("No AI decisions found with current filters")
-
-def render_analytics():
-    """Render analytics and matching section"""
-    st.header("📈 Performance Analytics")
-    
-    # Add sync button for trade data
-    col1, col2, col3 = st.columns([2, 1, 1])
-    with col1:
-        if st.button("🔄 Refresh Performance Metrics", key="refresh_metrics"):
-            st.cache_data.clear()
-    with col2:
-        if st.button("📊 Sync Trade Data", key="sync_analytics"):
-            if sync_trade_log_with_mt5():
-                st.success("✅ Trade data synced!")
-                st.rerun()
-            else:
-                st.error("❌ Failed to sync trade data")
-    with col3:
-        if st.button("🔄 Force MT5 Refresh", key="force_mt5_refresh"):
-            st.cache_data.clear()
-            st.success("✅ MT5 data refreshed! Reloading...")
-            st.rerun()
-    
-    # Load data at the beginning
-    ai_log = log_processor.load_ai_decision_log()
-    trade_log = log_processor.load_trade_log()
-    
-    # Generate performance report
-    if st.button("🔄 Refresh Performance Metrics"):
-        st.cache_data.clear()
-    
-    # Load performance metrics
-    try:
-        report = performance_metrics.generate_performance_report()
-        overall_metrics = report.get('overall_metrics', {})
-        
-        if not overall_metrics:
-            st.info("No performance data available. Run some trades first!")
-            
-            # Fallback to basic analytics
-            if ai_log.empty and trade_log.empty:
-                st.info("No data available for analytics")
-                return
-            
-            # AI Decision vs Trade Matching
-            if not ai_log.empty and not trade_log.empty:
-                st.subheader("🔄 AI Decision vs Trade Matching")
-                
-                tolerance = st.slider("Matching Tolerance (minutes)", 1, 60, 5)
-                matched_data = log_processor.match_ai_with_trades(ai_log, trade_log, tolerance)
-                
-                if not matched_data.empty:
-                    match_rate = (matched_data['trade_matched'].sum() / len(matched_data)) * 100
-                    st.metric("Match Rate", f"{match_rate:.1f}%")
-                    
-                    # Show matched decisions
-                    matched_only = matched_data[matched_data['trade_matched'] == True]
-                    if not matched_only.empty:
-                        st.subheader("✅ Matched Decisions")
-                        st.dataframe(matched_only[['timestamp', 'symbol', 'ai_decision', 'confidence', 
-                                                 'trade_price', 'trade_lot', 'reasoning']], 
-                                   use_container_width=True)
-            
-            # Recent activity
-            if not ai_log.empty:
-                st.subheader("⚡ Recent AI Activity (24h)")
-                recent_ai = log_processor.get_recent_entries(ai_log, 24)
-                if not recent_ai.empty:
-                    st.dataframe(recent_ai[['timestamp', 'symbol', 'ai_decision', 'confidence', 'executed']], 
-                               use_container_width=True)
-                else:
-                    st.info("No recent AI activity")
-            return
-        
-        # Performance Summary Section
-        st.subheader("📊 Performance Summary")
-        
-        # Overall metrics
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("Total Trades", overall_metrics.get('total_trades', 0))
-            st.metric("Executed Trades", overall_metrics.get('executed_trades', 0))
-        
-        with col2:
-            execution_rate = overall_metrics.get('execution_rate', 0)
-            st.metric("Execution Rate", f"{execution_rate * 100:.1f}%")
-            st.metric("Avg Lot Size", f"{overall_metrics.get('avg_lot_size', 0):.2f}")
-        
-        with col3:
-            st.metric("Most Traded Symbol", overall_metrics.get('most_traded_symbol', 'N/A'))
-            st.metric("Most Active Session", overall_metrics.get('most_active_session', 'N/A'))
-        
-        with col4:
-            # Calculate actual P&L from trade data
-            if not trade_log.empty and 'profit' in trade_log.columns:
-                total_pnl = trade_log['profit'].sum()
-                win_rate = len(trade_log[trade_log['profit'] > 0]) / len(trade_log) * 100 if len(trade_log) > 0 else 0
-                st.metric("Total P&L", f"${total_pnl:.2f}")
-                st.metric("Win Rate", f"{win_rate:.1f}%")
-            else:
-                st.metric("Total P&L", "$0.00")
-                st.metric("Win Rate", "0.0%")
-        
-        # Additional performance insights
-        st.subheader("📈 Performance Insights")
-        
-        # Recent performance trends
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            # Last 7 days performance
-            if not trade_log.empty and 'profit' in trade_log.columns:
-                seven_days_ago = datetime.now() - timedelta(days=7)
-                recent_trades = trade_log[trade_log['timestamp'] >= seven_days_ago]
-                recent_pnl = recent_trades['profit'].sum()
-                st.metric("7-Day P&L", f"${recent_pnl:.2f}")
-            else:
-                st.metric("7-Day P&L", "$0.00")
-        
-        with col2:
-            # Total volume traded
-            if not trade_log.empty:
-                if 'volume' in trade_log.columns:
-                    total_volume = trade_log['volume'].sum()
-                elif 'lot' in trade_log.columns:
-                    total_volume = trade_log['lot'].sum()
-                else:
-                    total_volume = 0
-                st.metric("Total Volume", f"{total_volume:.2f}")
-            else:
-                st.metric("Total Volume", "0.00")
-        
-        with col3:
-            # Best performing symbol
-            if not trade_log.empty and 'profit' in trade_log.columns and 'symbol' in trade_log.columns:
-                symbol_performance = trade_log.groupby('symbol')['profit'].sum()
-                if not symbol_performance.empty:
-                    best_symbol = symbol_performance.idxmax()
-                    best_pnl = symbol_performance.max()
-                    st.metric("Best Symbol", f"{best_symbol} (${best_pnl:.2f})")
-                else:
-                    st.metric("Best Symbol", "N/A")
-            else:
-                st.metric("Best Symbol", "N/A")
-        
-        # Symbol performance
-        st.subheader("📈 Symbol Performance")
-        symbol_metrics = report.get('symbol_metrics', {})
-        
-        if symbol_metrics:
-            symbol_df = pd.DataFrame.from_dict(symbol_metrics, orient='index')
-            symbol_df = symbol_df.reset_index()
-            symbol_df.columns = ['Symbol', 'Trades', 'Profit', 'Win Rate', 'Avg Trade']
-            st.dataframe(symbol_df, use_container_width=True)
+        if 'technical_score' in filtered_log.columns:
+            avg_score = filtered_log['technical_score'].apply(
+                lambda x: float(x) if str(x).replace('.', '').isdigit() else 0
+            ).mean()
+            st.metric("Avg Tech Score", f"{avg_score:.1f}")
         else:
-            st.info("No symbol performance data available")
+            st.metric("Avg Tech Score", "N/A")
+    
+    # Decision distribution pie chart
+    st.subheader("📊 Decision Distribution")
+    
+    if 'ai_decision' in filtered_log.columns:
+        decision_counts = filtered_log['ai_decision'].value_counts()
         
-        # Session performance
-        st.subheader("🕐 Session Performance")
-        session_metrics = report.get('session_metrics', {})
-        if session_metrics:
-            session_df = pd.DataFrame.from_dict(session_metrics, orient='index')
-            st.dataframe(session_df, use_container_width=True)
-        
-        # Daily performance chart
-        st.subheader("📅 Daily Performance")
-        
-        # Get actual MT5 account balance and equity
-        mt5_balance = performance_metrics.get_mt5_account_balance()
-        mt5_equity = performance_metrics.get_mt5_account_equity()
-        
-        if mt5_balance is not None:
-            print(f"✅ MT5 Account Balance: ${mt5_balance:.2f}")
-            print(f"✅ MT5 Account Equity: ${mt5_equity:.2f}")
+        if not decision_counts.empty:
+            # Create pie chart
+            fig = go.Figure(data=[go.Pie(
+                labels=decision_counts.index,
+                values=decision_counts.values,
+                hole=0.3,
+                marker_colors=['#00ff88', '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57']
+            )])
             
-            # Create a simple daily performance chart using actual MT5 data
-            # Since we can't get historical balance data easily, we'll show current vs initial
-            initial_balance = 10000  # Starting balance
-            current_balance = mt5_balance
-            current_equity = mt5_equity if mt5_equity is not None else mt5_balance
-            
-            # Create the chart similar to the screenshot
-            fig = go.Figure()
-            
-            # Add current balance point (green)
-            fig.add_trace(go.Scatter(
-                x=[datetime.now().date()],
-                y=[current_balance],
-                mode='markers+text',
-                name='Current Balance',
-                line=dict(color='lightgreen', width=2),
-                marker=dict(color='lightgreen', size=12),
-                text=[f"${current_balance:.2f}"],
-                textposition="top center"
-            ))
-            
-            # Add current equity point (blue)
-            fig.add_trace(go.Scatter(
-                x=[datetime.now().date()],
-                y=[current_equity],
-                mode='markers+text',
-                name='Current Equity',
-                line=dict(color='lightblue', width=2),
-                marker=dict(color='lightblue', size=12),
-                text=[f"${current_equity:.2f}"],
-                textposition="bottom center"
-            ))
-            
-            # Add initial balance line (dashed)
-            fig.add_hline(
-                y=initial_balance,
-                line_dash="dash",
-                line_color="gray",
-                annotation_text=f"Initial Balance: ${initial_balance:.2f}",
-                annotation_position="left"
-            )
-            
-            # Add profit target line (horizontal green line)
-            profit_target = 11000  # You can adjust this
-            fig.add_hline(
-                y=profit_target,
-                line_dash="solid",
-                line_color="green",
-                annotation_text="Profit Target",
-                annotation_position="top right"
-            )
-            
-            # Add max loss limit line (horizontal red line)
-            max_loss_limit = 9000  # You can adjust this
-            fig.add_hline(
-                y=max_loss_limit,
-                line_dash="solid",
-                line_color="red",
-                annotation_text="Max Loss Limit",
-                annotation_position="bottom right"
-            )
-            
-            # Update layout
             fig.update_layout(
-                title="Account Performance (Live MT5 Data)",
-                xaxis_title="Date",
-                yaxis_title="Amount (USD)",
-                hovermode='x unified',
+                title="AI Decision Distribution",
                 showlegend=True,
                 legend=dict(
                     orientation="h",
                     yanchor="bottom",
                     y=1.02,
-                    xanchor="right",
-                    x=1
-                )
+                    xanchor="center",
+                    x=0.5
+                ),
+                height=400
             )
-            
-            # Update y-axis to show proper range
-            min_balance = min(current_balance, current_equity, max_loss_limit)
-            max_balance = max(current_balance, current_equity, profit_target)
-            fig.update_yaxes(range=[min_balance - 100, max_balance + 100])
             
             st.plotly_chart(fig, use_container_width=True)
             
-            # Show key metrics
-            col1, col2, col3, col4 = st.columns(4)
+            # Show decision breakdown
+            col1, col2 = st.columns(2)
             with col1:
-                total_pnl = current_balance - initial_balance
-                st.metric("Total P&L", f"${total_pnl:.2f}")
+                st.subheader("📈 Decision Breakdown")
+                for decision, count in decision_counts.items():
+                    percentage = (count / len(filtered_log)) * 100
+                    st.metric(f"{decision}", f"{count} ({percentage:.1f}%)")
+            
             with col2:
-                st.metric("Current Balance", f"${current_balance:.2f}")
-            with col3:
-                if mt5_equity is not None:
-                    equity_diff = current_equity - current_balance
-                    st.metric("Equity Difference", f"${equity_diff:.2f}")
-                else:
-                    st.metric("Current Equity", "N/A")
-            with col4:
-                profit_percentage = (total_pnl / initial_balance) * 100
-                st.metric("Profit %", f"{profit_percentage:.2f}%")
-            
-            # Show account summary
-            st.subheader("📊 Account Summary")
-            summary_data = {
-                "Metric": ["Initial Balance", "Current Balance", "Total P&L", "Profit %", "Current Equity"],
-                "Value": [
-                    f"${initial_balance:.2f}",
-                    f"${current_balance:.2f}",
-                    f"${total_pnl:.2f}",
-                    f"{profit_percentage:.2f}%",
-                    f"${current_equity:.2f}" if mt5_equity is not None else "N/A"
-                ]
-            }
-            st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
-            
+                st.subheader("🎯 Execution Stats")
+                if 'executed' in filtered_log.columns:
+                    executed_count = filtered_log['executed'].sum()
+                    total_decisions = len(filtered_log)
+                    execution_rate = (executed_count / total_decisions) * 100 if total_decisions > 0 else 0
+                    st.metric("Executed Trades", f"{executed_count} ({execution_rate:.1f}%)")
+                    
+                    # Show override stats if available
+                    if 'ai_override' in filtered_log.columns:
+                        override_count = filtered_log['ai_override'].sum()
+                        override_rate = (override_count / total_decisions) * 100 if total_decisions > 0 else 0
+                        st.metric("AI Overrides", f"{override_count} ({override_rate:.1f}%)")
         else:
-            st.error("❌ Could not fetch MT5 account data")
-            
-        # Also show trade-based P&L for comparison
-        if not trade_log.empty and 'profit' in trade_log.columns:
-            st.subheader("📈 Trade-Based P&L (For Reference)")
-            trade_pnl = trade_log['profit'].sum()
-            st.info(f"Trade-based P&L: ${trade_pnl:.2f} (excludes commissions/swaps)")
-            st.info(f"MT5 Account P&L: ${mt5_balance - 10000:.2f} (includes all fees)")
-            st.info(f"Difference: ${(mt5_balance - 10000) - trade_pnl:.2f} (commissions/swaps)")
-        
-    except Exception as e:
-        st.error(f"Error loading performance metrics: {e}")
-        st.info("Make sure the bot has been running and has trade data available.")
+            st.info("No decision data available for chart")
+    else:
+        st.info("No 'ai_decision' column found in data")
+    
+    # Display detailed log
+    st.subheader("📋 AI Decision Details")
+    
+    # Select columns to display (only include columns that exist)
+    base_columns = ['timestamp', 'symbol', 'ai_decision', 'ai_confidence', 'technical_score', 'ema_trend', 'final_direction', 'executed']
+    optional_columns = ['ai_reasoning', 'ai_risk_note', 'ai_override', 'override_reason', 'execution_source']
+    
+    # Only include columns that actually exist in the data
+    display_columns = []
+    for col in base_columns + optional_columns:
+        if col in filtered_log.columns:
+            display_columns.append(col)
+    
+    # Ensure we have at least some columns to display
+    if not display_columns:
+        display_columns = list(filtered_log.columns)
+    
+    # Format timestamp for display
+    display_log = filtered_log[display_columns].copy()
+    if 'timestamp' in display_log.columns:
+        try:
+            display_log['timestamp'] = pd.to_datetime(display_log['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+            # Sort by timestamp (newest first)
+            display_log = display_log.sort_values('timestamp', ascending=False)
+        except Exception as e:
+            st.warning(f"Could not format timestamp column: {e}")
+            # If timestamp formatting fails, just sort by index
+            display_log = display_log.sort_index(ascending=False)
+    else:
+        # If no timestamp column, sort by index
+        display_log = display_log.sort_index(ascending=False)
+    
+    st.dataframe(display_log, use_container_width=True)
+    
+    # Download button
+    csv = filtered_log.to_csv(index=False)
+    st.download_button(
+        label="📥 Download AI Decisions (CSV)",
+        data=csv,
+        file_name=f"ai_decisions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv"
+    )
 
 def render_sidebar():
     """Render the sidebar with status and controls"""
@@ -1223,7 +1011,7 @@ def main():
     st.markdown("---")
     
     # Navigation tabs
-    tab1, tab2, tab3, tab4 = st.tabs(["⚙️ Configuration", "📊 Trade Logs", "🤖 AI Decisions", "📈 Analytics"])
+    tab1, tab2, tab3, tab4 = st.tabs(["⚙️ Configuration", "📊 Trade Logs", "🤖 AI Decisions", "🧠 D.E.V.I Analytics"])
     
     with tab1:
         render_config_editor()
@@ -1235,7 +1023,14 @@ def main():
         render_ai_decisions()
     
     with tab4:
-        render_analytics()
+        # Import and render the comprehensive analytics dashboard
+        try:
+            from analytics_dashboard import AnalyticsDashboard
+            dashboard = AnalyticsDashboard()
+            dashboard.render_dashboard()
+        except ImportError as e:
+            st.error(f"Could not load analytics dashboard: {e}")
+            st.info("Please ensure analytics_dashboard.py is in the GUI Components directory")
     
     # Handle backup modal
     if st.session_state.get('show_backups', False):
