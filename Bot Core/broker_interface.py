@@ -49,6 +49,14 @@ def get_account_info_safe():
 
 # === Trade Execution with optional SL/TP ===
 def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_trend=None, ai_confidence=None, ai_reasoning=None, risk_note=None):
+    # Check for post-session lot sizing
+    from session_utils import is_post_session
+    from post_session_manager import get_post_session_lot_size_for_symbol
+    
+    if is_post_session():
+        original_lot = lot
+        lot = get_post_session_lot_size_for_symbol(symbol, lot)
+        print(f"🕐 Post-Session: Lot size adjusted from {original_lot} to {lot} (0.75x)")
     if not mt5.terminal_info():
         print("❌ MT5 terminal not Connected - Cannot place trade.")
         return False
@@ -101,6 +109,12 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_
 
     print(f"🧲 Price: {price:.{digits}f} | SL: {sl:.{digits}f} | TP: {tp:.{digits}f}")
 
+    # Prepare comment with post-session tag if applicable
+    from session_utils import is_post_session
+    base_comment = f"AI Trading Bot {action}"
+    if is_post_session():
+        base_comment += " post_session=true"
+    
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
         "symbol": resolved_symbol,
@@ -111,7 +125,7 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_
         "tp": round(tp, digits),
         "deviation": deviation,
         "magic": 123456,
-        "comment": f"AI Trading Bot {action}",
+        "comment": base_comment,
         "type_time": mt5.ORDER_TIME_GTC,
         "type_filling": mt5.ORDER_FILLING_IOC,
     }

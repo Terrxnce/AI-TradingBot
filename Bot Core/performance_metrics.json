@@ -1,0 +1,97 @@
+{
+  "overall_metrics": {
+    "total_trades": 67,
+    "executed_trades": 67,
+    "execution_rate": 1.0,
+    "win_rate": 0,
+    "profit_factor": 0,
+    "average_trade": 0,
+    "total_profit": 0,
+    "max_drawdown": 0,
+    "sharpe_ratio": 0,
+    "risk_adjusted_return": 0,
+    "avg_lot_size": 0.3365671641791045,
+    "most_traded_symbol": "USDJPY",
+    "most_active_session": "New_York"
+  },
+  "daily_metrics": {
+    "2025-07-21": {
+      "trades": 33,
+      "profit": 120.31,
+      "wins": 24,
+      "losses": 9,
+      "win_rate": 0.7272727272727273
+    },
+    "2025-07-22": {
+      "trades": 14,
+      "profit": 112.17000000000002,
+      "wins": 11,
+      "losses": 3,
+      "win_rate": 0.7857142857142857
+    },
+    "2025-07-23": {
+      "trades": 6,
+      "profit": 119.61,
+      "wins": 3,
+      "losses": 3,
+      "win_rate": 0.5
+    },
+    "2025-07-24": {
+      "trades": 4,
+      "profit": 35.300000000000004,
+      "wins": 4,
+      "losses": 0,
+      "win_rate": 1.0
+    },
+    "2025-07-25": {
+      "trades": 5,
+      "profit": -260.01,
+      "wins": 2,
+      "losses": 3,
+      "win_rate": 0.4
+    },
+    "2025-07-28": {
+      "trades": 2,
+      "profit": 121.47,
+      "wins": 2,
+      "losses": 0,
+      "win_rate": 1.0
+    },
+    "2025-07-29": {
+      "trades": 3,
+      "profit": -245.09999999999997,
+      "wins": 1,
+      "losses": 2,
+      "win_rate": 0.3333333333333333
+    }
+  },
+  "symbol_metrics": {
+    "USDJPY": {
+      "trades": 67,
+      "profit": 3.750000000000014,
+      "win_rate": 0.7014925373134329,
+      "average_trade": 0.05597014925373155
+    }
+  },
+  "session_metrics": {
+    "New_York": {
+      "trades": 50,
+      "profit": 207.8400000000001,
+      "win_rate": 0.76,
+      "average_trade": 4.156800000000001
+    },
+    "Post_Market": {
+      "trades": 9,
+      "profit": -101.56000000000002,
+      "win_rate": 0.3333333333333333,
+      "average_trade": -11.284444444444446
+    },
+    "Asia": {
+      "trades": 8,
+      "profit": -102.53,
+      "win_rate": 0.75,
+      "average_trade": -12.81625
+    }
+  },
+  "generated_at": "2025-07-30T12:00:26.311633"
+}

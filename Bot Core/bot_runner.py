@@ -225,6 +225,22 @@ def run_bot():
 
             # Check for 4PM close trades
             close_trades_at_4pm()
+            
+            # Check for post-session management
+            from post_session_manager import (
+                check_post_session_partial_close,
+                check_post_session_full_close,
+                check_post_session_hard_exit,
+                reset_post_session_state_if_needed
+            )
+            
+            # Reset post-session state if needed
+            reset_post_session_state_if_needed()
+            
+            # Check post-session profit management
+            check_post_session_partial_close()
+            check_post_session_full_close()
+            check_post_session_hard_exit()
 
             for symbol in SYMBOLS:
                 print(f"\n⏳ Analyzing {symbol}...")

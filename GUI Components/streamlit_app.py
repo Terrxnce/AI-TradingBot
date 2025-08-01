@@ -69,6 +69,24 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# === Timeout Prevention Configuration ===
+# Set session timeout to prevent disconnections
+if 'last_activity' not in st.session_state:
+    st.session_state.last_activity = time.time()
+
+# Update activity timestamp on each interaction
+st.session_state.last_activity = time.time()
+
+# Auto-refresh every 30 seconds to keep connection alive
+if 'auto_refresh_counter' not in st.session_state:
+    st.session_state.auto_refresh_counter = 0
+
+st.session_state.auto_refresh_counter += 1
+
+# Add a hidden auto-refresh mechanism
+if st.session_state.auto_refresh_counter % 30 == 0:  # Every 30 seconds
+    st.rerun()
+
 # === Authentication ===
 def check_password():
     """Basic password protection for team access"""
@@ -332,15 +350,36 @@ def render_config_editor():
             value=config.get("use_liquidity_sweep", True)
         )
         
+        # Disable RSI and Fibonacci toggles with tooltips
         use_rsi = st.checkbox(
             "Use RSI Indicator",
-            value=config.get("use_rsi", True)
+            value=False,
+            disabled=True,
+            help="🧪 Coming Soon – Currently in Testing"
         )
         
         use_fib = st.checkbox(
             "Use Fibonacci",
-            value=config.get("use_fib", True)
+            value=False,
+            disabled=True,
+            help="🧪 Coming Soon – Currently in Testing"
         )
+        
+        # Add visual indicator
+        st.caption("🧪 RSI & Fibonacci: Testing Phase")
+        
+        # Post-Session Trading Control
+        st.subheader("🕐 Post-Session Trading Control")
+        post_session_enabled = st.checkbox(
+            "Enable Post-Session Trading",
+            value=config.get("post_session_enabled", True),
+            help="Enable enhanced post-session trading (17:00-19:00 UTC) with 0.75x lot sizing"
+        )
+        
+        if post_session_enabled:
+            st.info("🕐 Post-Session Active: Enhanced trading with 0.75x lot sizing, 8.0 score threshold, and 0.75%/1.5% profit targets")
+        else:
+            st.warning("⏸️ Post-Session Disabled: Only regular session trading (14:00-16:00 UTC) will be active")
         
         # USD Trading Control
         st.subheader("🇺🇸 USD Trading Control")
@@ -406,6 +445,7 @@ def render_config_editor():
                 "use_rsi": use_rsi,
                 "use_fib": use_fib,
                 "restrict_usd_to_am": restrict_usd,
+                "post_session_enabled": post_session_enabled,
             })
             
             if restrict_usd:

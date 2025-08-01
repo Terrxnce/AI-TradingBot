@@ -166,7 +166,7 @@
 
 ### Files Modified
 - `news_guard.py` - Complete rewrite with enhanced news protection
-- `Data Files/config.py` - Added news protection settings
+- `Data Files/` - Added news protection settings
 - `Bot Core/bot_runner.py` - Integrated enhanced news protection
 - `position_manager.py` - Verified 4PM closure logic
 - `profit_guard.py` - Verified profit management logic

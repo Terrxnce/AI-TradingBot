@@ -118,7 +118,18 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
     Technicals decide direction. AI must confirm unless technical score is very strong.
     AI response must be in structured format: ENTRY_DECISION, CONFIDENCE, etc.
     """
-    required_score = CONFIG.get("min_score_for_trade", 6.0)
+    # Check if we're in post-session mode
+    from session_utils import is_post_session
+    from post_session_manager import is_post_session_trade_eligible
+    
+    is_post_session_mode = is_post_session()
+    
+    if is_post_session_mode:
+        required_score = CONFIG.get("post_session_score_threshold", 8.0)
+        print(f"🕐 Post-Session Mode: Required score = {required_score}")
+    else:
+        required_score = CONFIG.get("min_score_for_trade", 6.0)
+    
     technical_score = 0.0
 
     # Enforce H1/M15 trend agreement
@@ -151,6 +162,24 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
     if technical_score < required_score:
         print(f"⚠️ Technical score {technical_score}/8 is below required {required_score}, Skipping trade.")
         return "HOLD"
+    
+    # Post-session specific eligibility check
+    if is_post_session_mode:
+        symbol = ta_signals.get("symbol", "")
+        ai_confidence = 0
+        
+        # Parse AI response to get confidence
+        parsed = parse_ai_response(ai_response_raw)
+        if parsed:
+            try:
+                ai_confidence = float(parsed.get('confidence', 0))
+            except:
+                ai_confidence = 0
+        
+        eligible, reason = is_post_session_trade_eligible(symbol, technical_score, ai_confidence)
+        if not eligible:
+            print(f"🕐 Post-Session: {reason}")
+            return "HOLD"
 
     # === PM Session USD/US Asset Filter ===
     from datetime import datetime

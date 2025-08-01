@@ -103,6 +103,20 @@ CONFIG = {
     "enable_news_protection": True,  # Set to False to disable news protection temporarily
     "news_protection_minutes": 30,   # minutes before/after red folder events (±30 min = 1 hour total)
     "news_refresh_interval_hours": 24,  # how often to refresh news data
+
+    # ✅ Post-Session Trading Settings
+    "post_session_enabled": True,
+    "post_session_score_threshold": 8.0,
+    "post_session_min_ai_confidence": 70,
+    "post_session_lot_multiplier": 0.75,  # 0.75x base lot for all post-session trades
+    "post_session_trailing_stop_after_profit_minutes": 30,
+    "post_session_soft_extension_cutoff_utc": "19:30",
+    "post_session_enable_reentry": True,
+    "post_session_max_reentries_per_symbol": 1,
+    "post_session_partial_close_percent": 0.75,
+    "post_session_full_close_percent": 1.5,
+    "post_session_extension_min_pnl": 1.0,
+    "post_session_max_extension_minutes": 30,
 }
 
 # Add any other configuration options you need here

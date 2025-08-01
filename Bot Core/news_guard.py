@@ -33,6 +33,25 @@ def get_high_impact_news():
                 print(f"📰 Loaded {len(events)} high-impact events from Forex Factory")
                 return events
         
+        # Try to load from existing JSON file (check multiple locations)
+        possible_paths = [
+            "high_impact_news.json",  # Current directory
+            "../high_impact_news.json",  # Parent directory
+            "Bot Core/high_impact_news.json",  # Bot Core subdirectory
+        ]
+        
+        for file_path in possible_paths:
+            try:
+                if os.path.exists(file_path):
+                    with open(file_path, "r") as f:
+                        events = json.load(f)
+                    if events:
+                        print(f"📰 Loaded {len(events)} high-impact events from {file_path}")
+                        return events
+            except Exception as e:
+                print(f"⚠️ Error loading from {file_path}: {e}")
+                continue
+        
         # No fallback to stale data - only real-time data is acceptable
         print("⚠️ No real-time news data available - trading without news protection")
         return []
