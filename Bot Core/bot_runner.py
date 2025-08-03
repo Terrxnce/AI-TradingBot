@@ -177,7 +177,8 @@ def run_bot():
     
     # Send bot online notification
     try:
-        send_bot_online_notification()
+        if not current_config.get("disable_telegram", True):
+            send_bot_online_notification()
         print("📤 Bot online notification sent to Telegram")
     except Exception as e:
         print(f"⚠️ Failed to send online notification: {e}")
@@ -538,19 +539,27 @@ def run_bot():
         print("🚑 Bot stopped by user.")
         # Send trading complete notification
         try:
-            send_trading_complete_notification()
-            print("📤 Trading complete notification sent to Telegram")
+            if not current_config.get("disable_telegram", False):
+                send_trading_complete_notification()
+                print("📤 Trading complete notification sent to Telegram")
+            else:
+                print("📵 Telegram disabled — skipping completion notification")
         except Exception as e:
             print(f"⚠️ Failed to send completion notification: {e}")
+
     except Exception as e:
         performance_monitor.log_error(f"Unhandled error: {e}", "run_bot")
         print(f"❌ Unhandled error: {e}")
         # Send offline notification for unexpected shutdown
         try:
-            send_bot_offline_notification()
-            print("📤 Bot offline notification sent to Telegram")
+            if not current_config.get("disable_telegram", False):
+                send_bot_offline_notification()
+                print("📤 Bot offline notification sent to Telegram")
+            else:
+                print("📵 Telegram disabled — skipping offline notification")
         except Exception as notify_e:
             print(f"⚠️ Failed to send offline notification: {notify_e}")
+
         if "not found" in str(e).lower() or "not initialized" in str(e).lower():
             print("🔁 Attempting to reinitialize MT5...")
             shutdown_mt5()
@@ -559,8 +568,10 @@ def run_bot():
                 print("❌ Failed to reinitialize MT5")
         else:
             raise
+
     finally:
         shutdown_mt5()
+
 
 if __name__ == "__main__":
     run_bot()

@@ -1,7 +1,7 @@
 {
   "overall_metrics": {
-    "total_trades": 67,
-    "executed_trades": 67,
+    "total_trades": 70,
+    "executed_trades": 70,
     "execution_rate": 1.0,
     "win_rate": 0,
     "profit_factor": 0,
@@ -10,7 +10,7 @@
     "max_drawdown": 0,
     "sharpe_ratio": 0,
     "risk_adjusted_return": 0,
-    "avg_lot_size": 0.3365671641791045,
+    "avg_lot_size": 0.3757142857142858,
     "most_traded_symbol": "USDJPY",
     "most_active_session": "New_York"
   },
@@ -63,22 +63,43 @@
       "wins": 1,
       "losses": 2,
       "win_rate": 0.3333333333333333
+    },
+    "2025-07-30": {
+      "trades": 1,
+      "profit": -34.42,
+      "wins": 0,
+      "losses": 1,
+      "win_rate": 0.0
+    },
+    "2025-07-31": {
+      "trades": 1,
+      "profit": 44.03,
+      "wins": 1,
+      "losses": 0,
+      "win_rate": 1.0
+    },
+    "2025-08-01": {
+      "trades": 1,
+      "profit": -80.19,
+      "wins": 0,
+      "losses": 1,
+      "win_rate": 0.0
     }
   },
   "symbol_metrics": {
     "USDJPY": {
-      "trades": 67,
-      "profit": 3.750000000000014,
-      "win_rate": 0.7014925373134329,
-      "average_trade": 0.05597014925373155
+      "trades": 70,
+      "profit": -66.82999999999996,
+      "win_rate": 0.6857142857142857,
+      "average_trade": -0.9547142857142851
     }
   },
   "session_metrics": {
     "New_York": {
-      "trades": 50,
-      "profit": 207.8400000000001,
-      "win_rate": 0.76,
-      "average_trade": 4.156800000000001
+      "trades": 53,
+      "profit": 137.25999999999996,
+      "win_rate": 0.7358490566037735,
+      "average_trade": 2.589811320754716
     },
     "Post_Market": {
       "trades": 9,
@@ -88,10 +109,10 @@
     },
     "Asia": {
       "trades": 8,
-      "profit": -102.53,
+      "profit": -102.52999999999999,
       "win_rate": 0.75,
-      "average_trade": -12.81625
+      "average_trade": -12.816249999999998
     }
   },
-  "generated_at": "2025-07-30T12:00:26.311633"
+  "generated_at": "2025-08-03T00:02:40.746223"
 }

@@ -26,6 +26,8 @@ FTMO_PARAMS = {
 }
 
 CONFIG = {
+    "disable_telegram": False,  # Set to False to enable
+
 
     # ✅ Trade Requirements
     "min_score_for_trade": 6,
@@ -70,7 +72,7 @@ CONFIG = {
     },
 
     # ✅ Cooldown Settings
-    "pnl_drawdown_limit": -0.5,
+    "drawdown_limit_percent": -1.0,
     "cooldown_minutes_after_recovery": 15,
     "global_profit_lock_cooldown_minutes": 0,
 

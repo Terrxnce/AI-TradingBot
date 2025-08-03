@@ -163,7 +163,11 @@ def check_pnl_drawdown_block():
     """
     balance = get_balance()
     floating_pnl = get_floating_pnl()
-    pnl_threshold = -balance * 0.01  # -1% threshold
+    threshold_percent = CONFIG.get("drawdown_limit_percent", -1.0)
+    pnl_threshold = (threshold_percent / 100) * balance
+
+    print(f"🔒 [RISK CHECK] Balance: {balance:.2f} | Floating PnL: {floating_pnl:.2f} | Threshold: {pnl_threshold:.2f}")
+
     
     block_active = load_loss_block_state()
     
@@ -178,7 +182,7 @@ def check_pnl_drawdown_block():
             return True  # Block trading
     
     # If we're not in block mode, check if we should enter it
-    if floating_pnl < pnl_threshold:
+    if floating_pnl <= pnl_threshold:
         print(f"🚫 Unrealized PnL below -1% threshold: ${floating_pnl:.2f} < ${pnl_threshold:.2f}")
         print("🚫 Entered drawdown block mode - no new trades until recovery.")
         set_loss_block_state(True)
