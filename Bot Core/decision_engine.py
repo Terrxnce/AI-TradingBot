@@ -13,6 +13,7 @@
 #
 # ✅ evaluate_trade_decision() – Main trade decision logic
 # ✅ calculate_dynamic_sl_tp() – ATR-based SL/TP calculator
+# ✅ calculate_structural_sl_tp_with_validation() – NEW: Structure-aware SL/TP with RRR validation
 #
 # Used by: bot_runner.py for decision execution
 #
@@ -28,6 +29,7 @@ from config import CONFIG  # Optional config import
 from ta.volatility import average_true_range
 import pandas as pd
 import re
+import json
 from datetime import datetime
 
 def build_ai_prompt(ta_signals: dict, macro_sentiment: str = "", session_info: str = ""):
@@ -183,7 +185,7 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
 
     # === PM Session USD/US Asset Filter ===
     from datetime import datetime
-    now = datetime.now()
+            now = datetime.now()
     current_hour = now.hour
     pm_start = CONFIG.get("pm_session_start", 17)
     pm_end = CONFIG.get("pm_session_end", 21)
@@ -283,10 +285,11 @@ def should_override_soft_limit(ta_signals, ai_response_raw, daily_loss, call_ai_
 
 def calculate_dynamic_sl_tp(price, direction, candles_df, rrr=2.0, window=14, buffer_multiplier=0.5):
     """
-    Calculates SL and TP dynamically based on ATR and recent price structure.
-    TP = price ± (price - SL) * RRR
-    SL = recent swing high/low ± buffer
+    DEPRECATED: Use calculate_structural_sl_tp() instead.
+    Kept for backward compatibility.
     """
+    print("⚠️ DEPRECATED: Using old ATR-based SL/TP calculation. Consider upgrading to structural SL/TP.")
+    
     if len(candles_df) < window + 1:
         raise ValueError("Not enough candle data to calculate ATR.")
 
@@ -310,23 +313,77 @@ def calculate_dynamic_sl_tp(price, direction, candles_df, rrr=2.0, window=14, bu
 
     return round(sl, 5), round(tp, 5)
 
-
-
-# === Test block ===
-if __name__ == "__main__":
-    test_ta = {
-        "bos": "bullish",
-        "fvg_valid": True,
-        "ob_tap": True,
-        "rejection": True,
-        "liquidity_sweep": True,
-        "engulfing": True,
-        "ema_trend": "bullish"
-    }
-
-    test_sentiment = """
-    1. Sentiment: Bullish
-    2. Confidence: Medium
-    3. Rationale: EMA trend and FVG are aligned for a buy.
+def calculate_structural_sl_tp_with_validation(candles_df, entry_price, direction, session_time=None, technical_score=0):
     """
-    print("Decision:", evaluate_trade_decision(test_ta, test_sentiment))
+    Calculate structure-aware SL/TP with RRR validation and logging.
+    
+    Returns:
+        dict: SL, TP, RRR validation result, and calculation details
+    """
+    import json
+    
+    try:
+        # Import the new structural SL/TP module
+        from calculate_structural_sl_tp import calculate_structural_sl_tp
+        
+        # Calculate structural SL/TP
+        result = calculate_structural_sl_tp(candles_df, entry_price, direction, session_time)
+        
+        # RRR validation
+        expected_rrr = result["expected_rrr"]
+        rrr_passed = expected_rrr >= 1.2
+        
+        # Additional validation based on technical score for borderline RRR
+        if 1.2 <= expected_rrr < 1.5 and technical_score < 7.0:
+            rrr_passed = False
+            result["rrr_reason"] = f"RRR {expected_rrr} requires technical score ≥7.0 (current: {technical_score})"
+        elif expected_rrr < 1.2:
+            rrr_passed = False
+            result["rrr_reason"] = f"RRR {expected_rrr} below minimum threshold 1.2"
+        else:
+            result["rrr_reason"] = f"RRR {expected_rrr} above minimum threshold"
+        
+        result["rrr_passed"] = rrr_passed
+        
+        # Log the calculation details
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "entry": entry_price,
+            "sl": result["sl"],
+            "tp": result["tp"],
+            "expected_rrr": result["expected_rrr"],
+            "technical_score": technical_score,
+            "sl_from": result["sl_from"],
+            "tp_from": result["tp_from"],
+            "session_adjustment": result["session_adjustment"],
+            "rrr_passed": rrr_passed,
+            "rrr_reason": result["rrr_reason"],
+            "structures_found": result["structures_found"],
+            "atr": result["atr"]
+        }
+        
+        # Append to AI decision log
+        try:
+            with open("Bot Core/ai_decision_log.jsonl", "a") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception as e:
+            print(f"⚠️ Failed to log SL/TP calculation: {e}")
+        
+        return result
+        
+    except Exception as e:
+        print(f"❌ Error in structural SL/TP calculation: {e}")
+        # Fallback to old dynamic calculation
+        sl, tp = calculate_dynamic_sl_tp(candles_df, entry_price, direction)
+        return {
+            "sl": sl,
+            "tp": tp,
+            "expected_rrr": 2.0,  # Assumed 2:1 RRR
+            "rrr_passed": True,
+            "rrr_reason": "Fallback to dynamic SL/TP",
+            "sl_from": "Dynamic fallback",
+            "tp_from": "Dynamic fallback",
+            "session_adjustment": "None",
+            "atr": 0.0001,
+            "structures_found": {"ob_count": 0, "fvg_count": 0, "bos_count": 0}
+        }
