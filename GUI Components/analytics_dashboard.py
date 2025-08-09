@@ -29,37 +29,63 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
 from log_utils import LogProcessor
 
 class AnalyticsDashboard:
-    """Comprehensive analytics dashboard for D.E.V.I. trading bot"""
+    """Comprehensive analytics dashboard for D.E.V.I. trading bot with multi-account support"""
     
-    def __init__(self):
+    def __init__(self, account_id: str = None, data_source=None, config_manager=None):
         try:
-            self.log_processor = LogProcessor()
-            self.config_data = config.CONFIG
-            self.ftmo_params = config.FTMO_PARAMS
+            # Multi-account support
+            self.account_id = account_id
+            self.data_source = data_source
+            self.config_manager = config_manager
             
-            # File paths - handle both direct and Streamlit execution
-            script_dir = os.path.dirname(__file__)
-            parent_dir = os.path.dirname(script_dir)
-            
-            # Try multiple possible paths for balance history
-            possible_balance_paths = [
-                os.path.join(parent_dir, "Data Files", "balance_history.csv"),
-                "Data Files/balance_history.csv",
-                os.path.join(script_dir, "..", "Data Files", "balance_history.csv"),
-                "balance_history.csv"
-            ]
-            
-            self.balance_history_path = None
-            for path in possible_balance_paths:
-                if os.path.exists(path):
-                    self.balance_history_path = path
-                    break
-            
-            if self.balance_history_path is None:
-                self.balance_history_path = possible_balance_paths[0]  # Default to first path
-            
-            self.trade_log_path = "Data Files/trade_log.csv"
-            self.ai_decision_log_path = "Data Files/ai_decision_log.jsonl"
+            if self.data_source and self.account_id:
+                # Use account-specific data sources
+                self.trade_log_path = self.data_source.get_trade_log_path(account_id)
+                self.ai_decision_log_path = self.data_source.get_ai_decision_log_path(account_id)
+                self.balance_history_path = self.data_source.get_balance_history_path(account_id)
+                
+                # Initialize log processor with account-specific paths
+                self.log_processor = LogProcessor(
+                    ai_log_file=self.ai_decision_log_path,
+                    trade_log_file=self.trade_log_path
+                )
+                
+                # Get account-specific configuration
+                if self.config_manager:
+                    self.config_data = self.config_manager.get_config(account_id)
+                    self.ftmo_params = self.config_manager.get_ftmo_params(account_id)
+                else:
+                    self.config_data = config.CONFIG
+                    self.ftmo_params = config.FTMO_PARAMS
+            else:
+                # Fallback to legacy mode for backward compatibility
+                self.log_processor = LogProcessor()
+                self.config_data = config.CONFIG
+                self.ftmo_params = config.FTMO_PARAMS
+                
+                # Legacy file paths - handle both direct and Streamlit execution
+                script_dir = os.path.dirname(__file__)
+                parent_dir = os.path.dirname(script_dir)
+                
+                # Try multiple possible paths for balance history
+                possible_balance_paths = [
+                    os.path.join(parent_dir, "Data Files", "balance_history.csv"),
+                    "Data Files/balance_history.csv",
+                    os.path.join(script_dir, "..", "Data Files", "balance_history.csv"),
+                    "balance_history.csv"
+                ]
+                
+                self.balance_history_path = None
+                for path in possible_balance_paths:
+                    if os.path.exists(path):
+                        self.balance_history_path = path
+                        break
+                
+                if self.balance_history_path is None:
+                    self.balance_history_path = possible_balance_paths[0]  # Default to first path
+                
+                self.trade_log_path = "Data Files/trade_log.csv"
+                self.ai_decision_log_path = "Data Files/ai_decision_log.jsonl"
             
             # Initialize data in correct order
             self.trade_log = self._load_trade_log()

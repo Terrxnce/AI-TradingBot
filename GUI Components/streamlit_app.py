@@ -30,15 +30,22 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))  # Add root directory
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Bot Core'))  # Add Bot Core directory
 
-from utils.config_manager import config_manager
+# Import multi-account system
+from account_manager import initialize_account_system, get_account_manager, get_data_source
+from account_config_manager import get_config_manager
 
-# Initialize log processor with explicit paths
-script_dir = os.path.dirname(__file__)
-ai_log_path = os.path.join(script_dir, "..", "Bot Core", "ai_decision_log.jsonl")
-trade_log_path = os.path.join(script_dir, "..", "Bot Core", "logs", "trade_log.csv")
+# Initialize the multi-account system
+account_manager, data_source = initialize_account_system()
+config_manager = get_config_manager()
 
+from utils.config_manager import config_manager as legacy_config_manager
 from utils.log_utils import LogProcessor
-log_processor = LogProcessor(ai_log_file=ai_log_path, trade_log_file=trade_log_path)
+
+# Initialize session state for account management
+if 'account_system_initialized' not in st.session_state:
+    st.session_state.account_system_initialized = True
+    st.session_state.current_account = None
+    st.session_state.log_processor = None
 
 # Try to import performance_metrics with fallback
 try:
@@ -116,17 +123,106 @@ def check_password():
     
     return True
 
+# === Account Selection ===
+def handle_account_selection():
+    """Handle account selection and switching"""
+    if 'current_account' not in st.session_state:
+        st.session_state.current_account = None
+    
+    # Get available accounts
+    available_accounts = account_manager.get_available_accounts()
+    
+    if not available_accounts:
+        st.error("❌ No accounts configured. Please set up accounts in accounts_config.json")
+        return False
+    
+    # Account selection in sidebar
+    with st.sidebar:
+        st.markdown("### 🏦 Account Selection")
+        
+        # Show current account info
+        current_account = account_manager.get_current_account_id()
+        if current_account:
+            current_config = account_manager.get_current_account_config()
+            st.success(f"**Active:** {current_config.account_name} ({current_account})")
+            
+            # Show MT5 connection status
+            account_info = data_source.get_mt5_account_info()
+            if account_info:
+                st.metric("Balance", f"${account_info['balance']:,.2f}")
+                st.metric("Equity", f"${account_info['equity']:,.2f}")
+            else:
+                st.warning("⚠️ MT5 not connected")
+        
+        # Account switcher
+        account_options = {}
+        for acc_id in available_accounts:
+            config = account_manager.accounts.get(acc_id)
+            if config:
+                account_options[f"{config.account_name} ({acc_id})"] = acc_id
+        
+        selected_display = st.selectbox(
+            "Select Account:",
+            options=list(account_options.keys()),
+            index=list(account_options.values()).index(current_account) if current_account in account_options.values() else 0
+        )
+        
+        selected_account_id = account_options[selected_display]
+        
+        # Switch account if different
+        if selected_account_id != current_account:
+            with st.spinner(f"Switching to account {selected_account_id}..."):
+                if account_manager.switch_account(selected_account_id):
+                    # Update config manager
+                    config_manager.set_active_account(selected_account_id)
+                    
+                    # Update log processor with new account paths
+                    ai_log_path = data_source.get_ai_decision_log_path()
+                    trade_log_path = data_source.get_trade_log_path()
+                    st.session_state.log_processor = LogProcessor(
+                        ai_log_file=ai_log_path, 
+                        trade_log_file=trade_log_path
+                    )
+                    
+                    st.session_state.current_account = selected_account_id
+                    st.success(f"✅ Switched to {selected_account_id}")
+                    st.rerun()
+                else:
+                    st.error(f"❌ Failed to switch to account {selected_account_id}")
+        
+        # Account management buttons
+        if st.button("🔄 Refresh Connection"):
+            if current_account:
+                account_manager.switch_account(current_account)
+                st.rerun()
+        
+        # Configuration section
+        with st.expander("⚙️ Account Settings"):
+            if current_account:
+                current_config = config_manager.get_config()
+                st.json(current_config)
+    
+    return True
+
 # === Utility Functions ===
 @st.cache_data(ttl=10)  # Cache for 10 seconds to reduce stale data
 def load_mt5_positions():
-    """Load current MT5 positions"""
+    """Load current MT5 positions for active account"""
     try:
-        if not mt5.initialize():
-            st.warning("⚠️ Failed to initialize MT5 connection")
+        # Check if we have an active account session
+        current_account = account_manager.get_current_account_id()
+        if not current_account:
+            st.warning("⚠️ No active account session")
             return pd.DataFrame()
         
+        # Use account-aware MT5 connection
+        account_info = data_source.get_mt5_account_info()
+        if not account_info:
+            st.warning("⚠️ Failed to get account info - MT5 not connected")
+            return pd.DataFrame()
+        
+        # Get positions through MT5 (connection already established by account manager)
         positions = mt5.positions_get()
-        mt5.shutdown()
         
         if positions is None:
             st.warning("⚠️ MT5 returned None for positions")
@@ -1049,11 +1145,30 @@ def main():
     if not check_password():
         return
     
+    # Handle account selection
+    if not handle_account_selection():
+        return
+    
+    # Initialize log processor if not already done
+    if st.session_state.log_processor is None:
+        current_account = account_manager.get_current_account_id()
+        if current_account:
+            ai_log_path = data_source.get_ai_decision_log_path()
+            trade_log_path = data_source.get_trade_log_path()
+            st.session_state.log_processor = LogProcessor(
+                ai_log_file=ai_log_path, 
+                trade_log_file=trade_log_path
+            )
+    
     # Render sidebar
     render_sidebar()
     
-    # Main title
-    st.title("🤖 D.E.V.I Trading Bot Dashboard")
+    # Main title with account info
+    current_account = account_manager.get_current_account_id()
+    current_config = account_manager.get_current_account_config()
+    account_display = f" - {current_config.account_name} ({current_account})" if current_config else ""
+    
+    st.title(f"🤖 D.E.V.I Trading Bot Dashboard{account_display}")
     st.markdown("### Internal Shared Beta - Live Configuration & Analytics")
     
     # Bot Status Monitoring Section
