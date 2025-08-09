@@ -59,6 +59,27 @@ except ImportError:
                 return 10000 # Default equity for dummy
         performance_metrics = DummyPerformanceMetrics()
 
+# Try to import account_manager with fallback
+try:
+    from account_manager import initialize_account_system
+    account_manager, data_source = initialize_account_system()
+except ImportError:
+    # Create dummy account manager and data source if import fails
+    class DummyAccountManager:
+        def get_account_info(self):
+            return {"account_type": "demo", "balance": 10000, "currency": "USD", "leverage": 100, "active": True}
+        def get_current_account(self):
+            return {"type": "demo", "balance": 10000, "active": True}
+    
+    class DummyDataSource:
+        def is_connected(self):
+            return True
+        def connect(self):
+            return True
+    
+    account_manager = DummyAccountManager()
+    data_source = DummyDataSource()
+
 import time
 
 # === App Configuration ===
