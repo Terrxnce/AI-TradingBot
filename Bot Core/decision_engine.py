@@ -185,7 +185,7 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
 
     # === PM Session USD/US Asset Filter ===
     from datetime import datetime
-            now = datetime.now()
+    now = datetime.now()
     current_hour = now.hour
     pm_start = CONFIG.get("pm_session_start", 17)
     pm_end = CONFIG.get("pm_session_end", 21)

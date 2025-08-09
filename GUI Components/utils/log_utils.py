@@ -67,14 +67,22 @@ class LogProcessor:
             
             # Read JSONL file
             entries = []
-            with open(self.ai_log_file, 'r') as f:
-                for line in f:
+            with open(self.ai_log_file, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
                     try:
-                        entry = json.loads(line.strip())
+                        line = line.strip()
+                        if not line:  # Skip empty lines
+                            continue
+                        entry = json.loads(line)
                         # Standardize entry format
                         standardized = self._standardize_ai_entry(entry)
-                        entries.append(standardized)
-                    except json.JSONDecodeError:
+                        if standardized:  # Only add valid entries
+                            entries.append(standardized)
+                    except json.JSONDecodeError as e:
+                        print(f"Skipping malformed JSON on line {line_num}: {e}")
+                        continue
+                    except Exception as e:
+                        print(f"Error processing line {line_num}: {e}")
                         continue
             
             if not entries:
@@ -97,21 +105,56 @@ class LogProcessor:
     
     def _standardize_ai_entry(self, entry: Dict[str, Any]) -> Dict[str, Any]:
         """Standardize AI log entry format"""
-        standardized = {
-            'timestamp': entry.get('timestamp', ''),
-            'symbol': entry.get('symbol', 'N/A'),
-            'ai_decision': entry.get('ai_decision', entry.get('final_direction', 'HOLD')),
-            'confidence': entry.get('ai_confidence', entry.get('confidence', 'N/A')),
-            'reasoning': entry.get('ai_reasoning', entry.get('reasoning', '')),
-            'risk_note': entry.get('ai_risk_note', entry.get('risk_note', '')),
-            'technical_score': entry.get('technical_score', 'N/A'),
-            'ema_trend': entry.get('ema_trend', 'N/A'),
-            'executed': entry.get('executed', False),
-            'ai_override': entry.get('ai_override', False),
-            'override_reason': entry.get('override_reason', ''),
-            'execution_source': entry.get('execution_source', 'AI')
-        }
-        return standardized
+        # Handle None or invalid entries
+        if not entry or not isinstance(entry, dict):
+            return {
+                'timestamp': '',
+                'symbol': 'N/A',
+                'ai_decision': 'HOLD',
+                'confidence': 'N/A',
+                'reasoning': '',
+                'risk_note': '',
+                'technical_score': 'N/A',
+                'ema_trend': 'N/A',
+                'executed': False,
+                'ai_override': False,
+                'override_reason': '',
+                'execution_source': 'AI'
+            }
+        
+        try:
+            standardized = {
+                'timestamp': entry.get('timestamp', ''),
+                'symbol': entry.get('symbol', 'N/A'),
+                'ai_decision': entry.get('ai_decision', entry.get('final_direction', 'HOLD')),
+                'confidence': entry.get('ai_confidence', entry.get('confidence', 'N/A')),
+                'reasoning': entry.get('ai_reasoning', entry.get('reasoning', '')),
+                'risk_note': entry.get('ai_risk_note', entry.get('risk_note', '')),
+                'technical_score': entry.get('technical_score', 'N/A'),
+                'ema_trend': entry.get('ema_trend', 'N/A'),
+                'executed': entry.get('executed', False),
+                'ai_override': entry.get('ai_override', False),
+                'override_reason': entry.get('override_reason', ''),
+                'execution_source': entry.get('execution_source', 'AI')
+            }
+            return standardized
+        except Exception as e:
+            print(f"Error standardizing AI entry: {e}")
+            # Return default entry on error
+            return {
+                'timestamp': '',
+                'symbol': 'N/A',
+                'ai_decision': 'HOLD',
+                'confidence': 'N/A',
+                'reasoning': 'Error processing entry',
+                'risk_note': '',
+                'technical_score': 'N/A',
+                'ema_trend': 'N/A',
+                'executed': False,
+                'ai_override': False,
+                'override_reason': '',
+                'execution_source': 'AI'
+            }
     
     def load_trade_log(self) -> pd.DataFrame:
         """Load trade log with proper formatting"""
