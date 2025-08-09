@@ -459,9 +459,20 @@ class PerformanceMetrics:
 """
         return summary
 
-    def get_mt5_account_balance(self):
-        """Get current account balance directly from MT5"""
+    def get_mt5_account_balance(self, account_id: str = None):
+        """Get current account balance directly from MT5 for specific account"""
         try:
+            # Try to use account-aware system if available
+            try:
+                from account_manager import get_data_source
+                data_source = get_data_source()
+                account_info = data_source.get_mt5_account_info(account_id)
+                if account_info:
+                    return account_info.get('balance')
+            except ImportError:
+                pass
+            
+            # Fallback to direct MT5 access
             import MetaTrader5 as mt5
             if not mt5.initialize():
                 return None
@@ -478,9 +489,20 @@ class PerformanceMetrics:
             print(f"❌ Error getting MT5 account balance: {e}")
             return None
     
-    def get_mt5_account_equity(self):
-        """Get current account equity directly from MT5"""
+    def get_mt5_account_equity(self, account_id: str = None):
+        """Get current account equity directly from MT5 for specific account"""
         try:
+            # Try to use account-aware system if available
+            try:
+                from account_manager import get_data_source
+                data_source = get_data_source()
+                account_info = data_source.get_mt5_account_info(account_id)
+                if account_info:
+                    return account_info.get('equity')
+            except ImportError:
+                pass
+            
+            # Fallback to direct MT5 access
             import MetaTrader5 as mt5
             if not mt5.initialize():
                 return None
