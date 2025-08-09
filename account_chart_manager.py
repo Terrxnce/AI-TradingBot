@@ -20,12 +20,18 @@
 
 import os
 import json
-import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 from dataclasses import dataclass, asdict
 import copy
+
+# Try to import pandas, create fallback if not available
+try:
+    import pandas as pd
+except ImportError:
+    # pandas not needed for chart manager core functionality
+    pd = None
 
 @dataclass
 class ChartIndicator:
@@ -209,7 +215,7 @@ class AccountChartManager:
             return config
             
         except Exception as e:
-            print(f"❌ Error loading chart config for account {account_id}: {e}")
+            print("❌ Error loading chart config for account " + str(account_id) + ": " + str(e))
             # Return default config
             config = AccountChartConfig(
                 account_id=account_id,
@@ -245,10 +251,10 @@ class AccountChartManager:
             with open(config_file, 'w') as f:
                 json.dump(config_dict, f, indent=2)
             
-            print(f"✅ Saved chart config for account {config.account_id}")
+            print("✅ Saved chart config for account " + str(config.account_id))
             
         except Exception as e:
-            print(f"❌ Error saving chart config for account {config.account_id}: {e}")
+            print("❌ Error saving chart config for account " + str(config.account_id) + ": " + str(e))
     
     def add_indicator(self, account_id: str, indicator: ChartIndicator):
         """Add indicator to account's default indicators"""
@@ -392,7 +398,7 @@ class AccountChartManager:
         with open(export_path, 'w') as f:
             json.dump(export_data, f, indent=2)
         
-        print(f"✅ Exported chart config for account {account_id} to {export_path}")
+        print("✅ Exported chart config for account " + str(account_id) + " to " + str(export_path))
     
     def import_account_config(self, account_id: str, import_path: str):
         """Import account chart configuration from file"""
@@ -426,10 +432,10 @@ class AccountChartManager:
             self.account_configs[account_id] = config
             self.save_account_config(config)
             
-            print(f"✅ Imported chart config for account {account_id} from {import_path}")
+            print("✅ Imported chart config for account " + str(account_id) + " from " + str(import_path))
             
         except Exception as e:
-            print(f"❌ Error importing chart config: {e}")
+            print("❌ Error importing chart config: " + str(e))
     
     def copy_config_between_accounts(self, source_account_id: str, target_account_id: str):
         """Copy chart configuration from one account to another"""
@@ -450,7 +456,7 @@ class AccountChartManager:
         self.account_configs[target_account_id] = target_config
         self.save_account_config(target_config)
         
-        print(f"📋 Copied chart config from account {source_account_id} to {target_account_id}")
+        print("📋 Copied chart config from account " + str(source_account_id) + " to " + str(target_account_id))
 
 # Global instance
 chart_manager: Optional[AccountChartManager] = None

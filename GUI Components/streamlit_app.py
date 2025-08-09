@@ -23,7 +23,28 @@ import json
 import os
 import sys
 from io import BytesIO
-import MetaTrader5 as mt5
+
+# Try to import MetaTrader5, create fallback if not available
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    print("⚠️ MetaTrader5 not available. Creating mock for testing.")
+    MT5_AVAILABLE = False
+    
+    # Create a mock MT5 class for testing
+    class mt5:
+        @staticmethod
+        def initialize():
+            return True
+        
+        @staticmethod
+        def shutdown():
+            pass
+        
+        @staticmethod
+        def positions_get():
+            return []
 
 # Add paths for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
@@ -31,12 +52,20 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))  # Add root direc
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Bot Core'))  # Add Bot Core directory
 
 # Import multi-account system
-from account_manager import initialize_account_system, get_account_manager, get_data_source
-from account_config_manager import get_config_manager
-
-# Initialize the multi-account system
-account_manager, data_source = initialize_account_system()
-config_manager = get_config_manager()
+try:
+    from account_manager import initialize_account_system, get_account_manager, get_data_source
+    from account_config_manager import get_config_manager
+    
+    # Initialize the multi-account system
+    account_manager, data_source = initialize_account_system()
+    config_manager = get_config_manager()
+    MULTI_ACCOUNT_ENABLED = True
+except Exception as e:
+    print("⚠️ Multi-account system not available:", str(e))
+    MULTI_ACCOUNT_ENABLED = False
+    account_manager = None
+    data_source = None
+    config_manager = None
 
 from utils.config_manager import config_manager as legacy_config_manager
 from utils.log_utils import LogProcessor
@@ -126,6 +155,10 @@ def check_password():
 # === Account Selection ===
 def handle_account_selection():
     """Handle account selection and switching"""
+    if not MULTI_ACCOUNT_ENABLED:
+        st.sidebar.warning("⚠️ Multi-account system not available. Using legacy mode.")
+        return True
+        
     if 'current_account' not in st.session_state:
         st.session_state.current_account = None
     
@@ -209,20 +242,30 @@ def handle_account_selection():
 def load_mt5_positions():
     """Load current MT5 positions for active account"""
     try:
-        # Check if we have an active account session
-        current_account = account_manager.get_current_account_id()
-        if not current_account:
-            st.warning("⚠️ No active account session")
-            return pd.DataFrame()
+        if MULTI_ACCOUNT_ENABLED:
+            # Check if we have an active account session
+            current_account = account_manager.get_current_account_id()
+            if not current_account:
+                st.warning("⚠️ No active account session")
+                return pd.DataFrame()
+            
+            # Use account-aware MT5 connection
+            account_info = data_source.get_mt5_account_info()
+            if not account_info:
+                st.warning("⚠️ Failed to get account info - MT5 not connected")
+                return pd.DataFrame()
+        else:
+            # Legacy MT5 connection
+            if not mt5.initialize():
+                st.warning("⚠️ Failed to initialize MT5 connection")
+                return pd.DataFrame()
         
-        # Use account-aware MT5 connection
-        account_info = data_source.get_mt5_account_info()
-        if not account_info:
-            st.warning("⚠️ Failed to get account info - MT5 not connected")
-            return pd.DataFrame()
-        
-        # Get positions through MT5 (connection already established by account manager)
+        # Get positions through MT5
         positions = mt5.positions_get()
+        
+        # Shutdown MT5 if in legacy mode
+        if not MULTI_ACCOUNT_ENABLED:
+            mt5.shutdown()
         
         if positions is None:
             st.warning("⚠️ MT5 returned None for positions")
@@ -1151,10 +1194,20 @@ def main():
     
     # Initialize log processor if not already done
     if st.session_state.log_processor is None:
-        current_account = account_manager.get_current_account_id()
-        if current_account:
-            ai_log_path = data_source.get_ai_decision_log_path()
-            trade_log_path = data_source.get_trade_log_path()
+        if MULTI_ACCOUNT_ENABLED:
+            current_account = account_manager.get_current_account_id()
+            if current_account:
+                ai_log_path = data_source.get_ai_decision_log_path()
+                trade_log_path = data_source.get_trade_log_path()
+                st.session_state.log_processor = LogProcessor(
+                    ai_log_file=ai_log_path, 
+                    trade_log_file=trade_log_path
+                )
+        else:
+            # Fallback to legacy paths
+            script_dir = os.path.dirname(__file__)
+            ai_log_path = os.path.join(script_dir, "..", "Bot Core", "ai_decision_log.jsonl")
+            trade_log_path = os.path.join(script_dir, "..", "Bot Core", "logs", "trade_log.csv")
             st.session_state.log_processor = LogProcessor(
                 ai_log_file=ai_log_path, 
                 trade_log_file=trade_log_path
@@ -1164,11 +1217,14 @@ def main():
     render_sidebar()
     
     # Main title with account info
-    current_account = account_manager.get_current_account_id()
-    current_config = account_manager.get_current_account_config()
-    account_display = f" - {current_config.account_name} ({current_account})" if current_config else ""
+    if MULTI_ACCOUNT_ENABLED:
+        current_account = account_manager.get_current_account_id()
+        current_config = account_manager.get_current_account_config()
+        account_display = " - " + str(current_config.account_name) + " (" + str(current_account) + ")" if current_config else ""
+    else:
+        account_display = " - Legacy Mode"
     
-    st.title(f"🤖 D.E.V.I Trading Bot Dashboard{account_display}")
+    st.title("🤖 D.E.V.I Trading Bot Dashboard" + account_display)
     st.markdown("### Internal Shared Beta - Live Configuration & Analytics")
     
     # Bot Status Monitoring Section

@@ -18,8 +18,6 @@
 
 import os
 import json
-import pandas as pd
-import MetaTrader5 as mt5
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, List
 from pathlib import Path
@@ -27,6 +25,66 @@ import shutil
 from contextlib import contextmanager
 import threading
 from dataclasses import dataclass, asdict
+
+# Try to import MetaTrader5, create fallback if not available
+try:
+    import MetaTrader5 as mt5
+    MT5_AVAILABLE = True
+except ImportError:
+    print("⚠️ MetaTrader5 not available. Creating mock for testing.")
+    MT5_AVAILABLE = False
+    
+    # Create a mock MT5 class for testing
+    class mt5:
+        @staticmethod
+        def initialize():
+            return True
+        
+        @staticmethod
+        def shutdown():
+            pass
+        
+        @staticmethod
+        def login(login, password, server):
+            return True
+        
+        @staticmethod
+        def account_info():
+            class MockAccount:
+                login = 12345
+                balance = 10000.0
+                equity = 10000.0
+                margin = 0.0
+                margin_free = 10000.0
+                margin_level = 0.0
+                currency = "USD"
+            return MockAccount()
+        
+        @staticmethod
+        def last_error():
+            return "Mock error"
+        
+        @staticmethod
+        def positions_get():
+            return []
+
+# Try to import pandas, create fallback if not available
+try:
+    import pandas as pd
+except ImportError:
+    # Create a minimal DataFrame class for basic functionality
+    class pd:
+        @staticmethod
+        def DataFrame(data=None, columns=None):
+            return {"data": data or [], "columns": columns or []}
+        
+        @staticmethod
+        def read_csv(path):
+            return {"data": [], "columns": []}
+        
+        @staticmethod
+        def to_datetime(data):
+            return data
 
 @dataclass
 class AccountConfig:
@@ -131,11 +189,11 @@ class MT5AccountConnector:
                     raise RuntimeError("Failed to retrieve account info after login")
                 
                 self.current_account = account_config
-                print(f"✅ Connected to MT5 account {account_config.account_id} ({account_info.login})")
+                print("✅ Connected to MT5 account " + str(account_config.account_id) + " (" + str(account_info.login) + ")")
                 return True
                 
             except Exception as e:
-                print(f"❌ Failed to connect to account {account_config.account_id}: {e}")
+                print("❌ Failed to connect to account " + str(account_config.account_id) + ": " + str(e))
                 self.current_account = None
                 return False
     
@@ -166,7 +224,7 @@ class MT5AccountConnector:
                 'currency': account_info.currency
             }
         except Exception as e:
-            print(f"❌ Error getting account info: {e}")
+            print("❌ Error getting account info: " + str(e))
             return None
 
 class AccountSessionManager:
@@ -192,12 +250,24 @@ class AccountSessionManager:
                 for account_id, account_data in config_data.items():
                     self.accounts[account_id] = AccountConfig(**account_data)
                 
-                print(f"✅ Loaded {len(self.accounts)} account configurations")
+                print("✅ Loaded " + str(len(self.accounts)) + " account configurations")
             except Exception as e:
-                print(f"❌ Error loading accounts config: {e}")
+                print("❌ Error loading accounts config: " + str(e))
         else:
             # Create default config file
             self.create_default_accounts_config()
+            # Reload the configuration after creating it
+            if os.path.exists(self.accounts_config_file):
+                try:
+                    with open(self.accounts_config_file, 'r') as f:
+                        config_data = json.load(f)
+                    
+                    for account_id, account_data in config_data.items():
+                        self.accounts[account_id] = AccountConfig(**account_data)
+                    
+                    print("✅ Loaded " + str(len(self.accounts)) + " account configurations after creation")
+                except Exception as e:
+                    print("❌ Error loading accounts config after creation: " + str(e))
     
     def create_default_accounts_config(self):
         """Create default accounts configuration"""
@@ -227,16 +297,16 @@ class AccountSessionManager:
         with open(self.accounts_config_file, 'w') as f:
             json.dump(default_accounts, f, indent=2)
         
-        print(f"📝 Created default accounts config: {self.accounts_config_file}")
+        print("📝 Created default accounts config: " + str(self.accounts_config_file))
     
     def switch_account(self, account_id: str) -> bool:
         """Switch to different account with complete context isolation"""
         if account_id not in self.accounts:
-            print(f"❌ Account {account_id} not found in configuration")
+            print("❌ Account " + str(account_id) + " not found in configuration")
             return False
         
         if not self.accounts[account_id].enabled:
-            print(f"❌ Account {account_id} is disabled")
+            print("❌ Account " + str(account_id) + " is disabled")
             return False
         
         # Cache current session data if switching
@@ -255,7 +325,7 @@ class AccountSessionManager:
         self._load_session_data(account_id)
         
         self.current_session = account_id
-        print(f"🔄 Switched to account session: {account_id}")
+        print("🔄 Switched to account session: " + str(account_id))
         return True
     
     def _cache_session_data(self, account_id: str):
@@ -358,7 +428,7 @@ class DataSourceAbstraction:
                     'tech_score', 'ai_confidence', 'reasoning'
                 ])
         except Exception as e:
-            print(f"❌ Error loading trade log: {e}")
+            print("❌ Error loading trade log: " + str(e))
             return pd.DataFrame()
     
     def load_balance_history(self, account_id: Optional[str] = None) -> pd.DataFrame:
@@ -373,7 +443,7 @@ class DataSourceAbstraction:
                 # Return empty DataFrame with correct columns
                 return pd.DataFrame(columns=['date', 'balance', 'equity'])
         except Exception as e:
-            print(f"❌ Error loading balance history: {e}")
+            print("❌ Error loading balance history: " + str(e))
             return pd.DataFrame()
     
     def get_mt5_account_info(self, account_id: Optional[str] = None) -> Optional[Dict]:

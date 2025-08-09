@@ -21,7 +21,7 @@ import json
 import copy
 from typing import Dict, Any, Optional
 from pathlib import Path
-import pandas as pd
+from datetime import datetime
 
 # Import original config as base template
 try:
@@ -122,7 +122,7 @@ class AccountConfigManager:
                 return self.account_configs[account_id]
                 
         except Exception as e:
-            print(f"❌ Error loading config for account {account_id}: {e}")
+            print("❌ Error loading config for account " + str(account_id) + ": " + str(e))
             # Fallback to base config
             self.account_configs[account_id] = copy.deepcopy(self.base_config)
             self.account_ftmo_params[account_id] = copy.deepcopy(self.base_ftmo_params)
@@ -170,7 +170,7 @@ class AccountConfigManager:
             if ftmo_updates:
                 account_data["ftmo_overrides"].update(ftmo_updates)
             
-            account_data["last_updated"] = str(pd.Timestamp.now())
+            account_data["last_updated"] = datetime.now().isoformat()
             
             # Save updated config
             with open(config_file, 'w') as f:
@@ -183,10 +183,10 @@ class AccountConfigManager:
             if account_id in self.account_ftmo_params and ftmo_updates:
                 self.account_ftmo_params[account_id].update(ftmo_updates)
             
-            print(f"✅ Updated config for account {account_id}")
+            print("✅ Updated config for account " + str(account_id))
             
         except Exception as e:
-            print(f"❌ Error updating config for account {account_id}: {e}")
+            print("❌ Error updating config for account " + str(account_id) + ": " + str(e))
     
     def get_config_value(self, key: str, account_id: Optional[str] = None, default: Any = None) -> Any:
         """Get specific config value for account"""
@@ -207,7 +207,7 @@ class AccountConfigManager:
         reset_config = {
             "config_overrides": {},
             "ftmo_overrides": {},
-            "last_updated": str(pd.Timestamp.now())
+            "last_updated": datetime.now().isoformat()
         }
         
         with open(config_file, 'w') as f:
@@ -219,7 +219,7 @@ class AccountConfigManager:
         if account_id in self.account_ftmo_params:
             del self.account_ftmo_params[account_id]
         
-        print(f"🔄 Reset config for account {account_id} to defaults")
+        print("🔄 Reset config for account " + str(account_id) + " to defaults")
     
     def copy_config_to_account(self, source_account_id: str, target_account_id: str):
         """Copy configuration from one account to another"""
@@ -238,7 +238,7 @@ class AccountConfigManager:
                 ftmo_overrides[key] = value
         
         self.update_account_config(target_account_id, config_overrides, ftmo_overrides)
-        print(f"📋 Copied config from account {source_account_id} to {target_account_id}")
+        print("📋 Copied config from account " + str(source_account_id) + " to " + str(target_account_id))
 
 # Global instance for backward compatibility
 config_manager: Optional[AccountConfigManager] = None
