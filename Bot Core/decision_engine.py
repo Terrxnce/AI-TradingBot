@@ -101,6 +101,14 @@ def parse_ai_response(response: str):
             elif "RISK_NOTE:" in line.upper():
                 parsed['risk_note'] = line.split("RISK_NOTE:")[-1].strip()
 
+        # Normalize confidence to 0–10 scale
+        try:
+            conf = float(parsed.get('confidence', 0))
+        except Exception:
+            conf = 0.0
+        if conf > 10:
+            conf = conf / 10.0
+        parsed['confidence'] = max(0.0, min(10.0, conf))
         return parsed
 
     except Exception as e:
@@ -205,14 +213,25 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
         print(f"⚡ Strong technicals (score: {technical_score}) override AI.")
         return direction
     
-    # === Parse structured AI response
+    # === Parse structured AI response with dynamic confidence requirements
     parsed = parse_ai_response(ai_response_raw)
     if parsed:
         print(f"🧠 AI Decision: {parsed['decision']} | Confidence: {parsed['confidence']} | Reason: {parsed['reasoning']}")
-        if parsed['decision'] == direction and parsed['confidence'] >= 7:
+        
+        # Dynamic AI confidence requirements based on technical score
+        if technical_score >= 7.0:
+            required_ai_confidence = 6  # Lower for strong technicals
+        elif technical_score >= 6.0:
+            required_ai_confidence = 7  # Standard requirement
+        else:
+            required_ai_confidence = 8  # Higher for weak technicals
+        
+        print(f"📊 Required AI confidence: {required_ai_confidence} (based on technical score {technical_score})")
+        
+        if parsed['decision'] == direction and parsed['confidence'] >= required_ai_confidence:
             return parsed['decision']
         else:
-            print("⚠️ AI confidence too low or direction mismatch")
+            print(f"⚠️ AI confidence {parsed['confidence']} below required {required_ai_confidence} or direction mismatch")
             return "HOLD"
     else:
         print("❌ Could not parse AI. Defaulting to HOLD.")
@@ -329,19 +348,27 @@ def calculate_structural_sl_tp_with_validation(candles_df, entry_price, directio
         # Calculate structural SL/TP
         result = calculate_structural_sl_tp(candles_df, entry_price, direction, session_time)
         
-        # RRR validation
+        # Dynamic RRR validation based on technical score
         expected_rrr = result["expected_rrr"]
-        rrr_passed = expected_rrr >= 1.2
         
-        # Additional validation based on technical score for borderline RRR
-        if 1.2 <= expected_rrr < 1.5 and technical_score < 7.0:
-            rrr_passed = False
-            result["rrr_reason"] = f"RRR {expected_rrr} requires technical score ≥7.0 (current: {technical_score})"
-        elif expected_rrr < 1.2:
-            rrr_passed = False
-            result["rrr_reason"] = f"RRR {expected_rrr} below minimum threshold 1.2"
+        if technical_score >= 7.0:
+            rrr_passed = expected_rrr >= 1.0  # Lower threshold for strong setups
+            result["rrr_reason"] = f"Strong technical score ({technical_score}) allows lower RRR threshold 1.0"
+        elif technical_score >= 6.0:
+            rrr_passed = expected_rrr >= 1.2  # Standard threshold
+            result["rrr_reason"] = f"Standard RRR threshold 1.2 for technical score {technical_score}"
         else:
-            result["rrr_reason"] = f"RRR {expected_rrr} above minimum threshold"
+            rrr_passed = expected_rrr >= 1.5  # Higher threshold for weak setups
+            result["rrr_reason"] = f"Weak technical score ({technical_score}) requires higher RRR threshold 1.5"
+        
+        # Additional validation for borderline cases
+        if not rrr_passed:
+            if technical_score >= 7.0 and expected_rrr < 1.0:
+                result["rrr_reason"] = f"RRR {expected_rrr} below minimum threshold 1.0 for strong technicals"
+            elif technical_score >= 6.0 and expected_rrr < 1.2:
+                result["rrr_reason"] = f"RRR {expected_rrr} below minimum threshold 1.2 for standard technicals"
+            elif technical_score < 6.0 and expected_rrr < 1.5:
+                result["rrr_reason"] = f"RRR {expected_rrr} below minimum threshold 1.5 for weak technicals"
         
         result["rrr_passed"] = rrr_passed
         
@@ -356,7 +383,7 @@ def calculate_structural_sl_tp_with_validation(candles_df, entry_price, directio
             "sl_from": result["sl_from"],
             "tp_from": result["tp_from"],
             "session_adjustment": result["session_adjustment"],
-            "rrr_passed": rrr_passed,
+            "rrr_passed": str(rrr_passed),  # Convert boolean to string
             "rrr_reason": result["rrr_reason"],
             "structures_found": result["structures_found"],
             "atr": result["atr"]
@@ -364,7 +391,15 @@ def calculate_structural_sl_tp_with_validation(candles_df, entry_price, directio
         
         # Append to AI decision log
         try:
-            with open("Bot Core/ai_decision_log.jsonl", "a") as f:
+            # Use user-specific path if available
+            from shared.settings import get_current_user_paths
+            user_paths = get_current_user_paths()
+            if user_paths:
+                log_path = user_paths["logs"] / "ai_decision_log.jsonl"
+            else:
+                log_path = "Bot Core/ai_decision_log.jsonl"
+            
+            with open(log_path, "a") as f:
                 f.write(json.dumps(log_entry) + "\n")
         except Exception as e:
             print(f"⚠️ Failed to log SL/TP calculation: {e}")

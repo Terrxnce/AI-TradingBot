@@ -305,6 +305,16 @@ def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=
             sl = entry_price + (atr * 0.5)
             sl_from = "ATR fallback"
     
+    # Validate SL position
+    if direction == "BUY" and sl >= entry_price:
+        print(f"⚠️ Invalid SL for BUY: {sl} >= {entry_price}, using ATR fallback")
+        sl = entry_price - (atr * 0.5)
+        sl_from = "ATR fallback (invalid structure)"
+    elif direction == "SELL" and sl >= entry_price:  # Fixed: SELL SL should be BELOW entry
+        print(f"⚠️ Invalid SL for SELL: {sl} >= {entry_price}, using ATR fallback")
+        sl = entry_price + (atr * 0.5)
+        sl_from = "ATR fallback (invalid structure)"
+    
     # Find TP structure (ahead of entry)
     tp_structure_type, tp_structure_price, tp_structure_strength = find_next_structure_ahead(
         entry_price, direction, structures

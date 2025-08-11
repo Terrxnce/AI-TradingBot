@@ -1,5 +1,10 @@
 import pandas as pd
-from utils.indicators import calculate_ema
+try:
+    # Preferred shared location
+    from shared.indicators import calculate_ema  # type: ignore
+except Exception:
+    # Fallback to existing utils path
+    from GUI Components.utils.indicators import calculate_ema  # type: ignore
 from strategy_engine import analyze_structure
 from decision_engine import calculate_dynamic_sl_tp
 from backtest_trade_manager import BacktestTradeManager

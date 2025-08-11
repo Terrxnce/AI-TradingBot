@@ -111,9 +111,9 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_
 
     # Prepare comment with post-session tag if applicable
     from session_utils import is_post_session
-    base_comment = f"AI Trading Bot {action}"
+    base_comment = f"DEVI_{action}"
     if is_post_session():
-        base_comment += " post_session=true"
+        base_comment += "_PM"
     
     request = {
         "action": mt5.TRADE_ACTION_DEAL,
@@ -130,10 +130,47 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_
         "type_filling": mt5.ORDER_FILLING_IOC,
     }
 
-    result = mt5.order_send(request)
-
+    # Try to send order with retry logic
+    max_retries = 3
+    for attempt in range(max_retries):
+        print(f"🔄 Attempting trade execution (attempt {attempt + 1}/{max_retries})...")
+        
+        result = mt5.order_send(request)
+        
+        if result is not None and hasattr(result, 'retcode'):
+            break  # Success, exit retry loop
+        
+        print(f"⚠️ Attempt {attempt + 1} failed - no result returned")
+        if attempt < max_retries - 1:
+            print("⏳ Waiting 2 seconds before retry...")
+            time.sleep(2)
+    
     if result is None or not hasattr(result, 'retcode'):
-        print(f"❌ Order send failed. No result returned.")
+        print(f"❌ Order send failed after {max_retries} attempts. No result returned.")
+        print(f"🔍 Debug: Symbol={resolved_symbol}, Action={action}, Lot={lot}, Price={price}, SL={sl}, TP={tp}")
+        
+        # Additional debugging
+        print(f"🔍 Market Status: {symbol_info.trade_mode}")
+        print(f"🔍 Point: {point}, Digits: {digits}")
+        print(f"🔍 Stop Level: {symbol_info.trade_stops_level}")
+        print(f"🔍 Freeze Level: {symbol_info.trade_freeze_level}")
+        print(f"🔍 MT5 Last Error: {mt5.last_error()}")
+        
+        # Check if market is closed
+        if symbol_info.trade_mode != mt5.SYMBOL_TRADE_MODE_FULL:
+            print(f"❌ Market is closed for {resolved_symbol}")
+            return False
+            
+        # Check minimum lot size
+        if lot < symbol_info.volume_min:
+            print(f"❌ Lot size {lot} below minimum {symbol_info.volume_min}")
+            return False
+            
+        # Check if MT5 is still connected
+        if not mt5.terminal_info():
+            print("❌ MT5 terminal connection lost")
+            return False
+            
         return False
 
     if result.retcode != mt5.TRADE_RETCODE_DONE:

@@ -15,7 +15,7 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from get_candles import get_latest_candle_data
 from strategy_engine import analyze_structure
-from decision_engine import evaluate_trade_decision, calculate_dynamic_sl_tp, build_ai_prompt
+from decision_engine import evaluate_trade_decision, calculate_dynamic_sl_tp, calculate_structural_sl_tp_with_validation, build_ai_prompt
 from broker_interface import initialize_mt5, shutdown_mt5, place_trade
 import importlib
 import sys
@@ -37,6 +37,10 @@ import json
 
 
 from datetime import time as dt_time
+import argparse
+from datetime import timezone
+from shared.settings import get_user_paths
+from shared.time_align import next_boundary_utc, sleep_until, now_utc
 
 def reload_config():
     """Dynamically reload configuration from config.py"""
@@ -63,10 +67,17 @@ def reload_config():
 
 
 # === Settings ===
-SYMBOLS = sys.argv[1:]
-if not SYMBOLS:
-    print("❌ Please provide at least one symbol, e.g. `python bot_runner.py EURUSD`")
-    sys.exit(1)
+parser = argparse.ArgumentParser()
+parser.add_argument("symbols", nargs="+", help="Symbols to trade, e.g. EURUSD USDJPY")
+parser.add_argument("--user-id", dest="user_id", required=True)
+parser.add_argument("--align", choices=["off", "quarter", "interval"], default="quarter",
+                    help="off: run now; quarter: 00/15/30/45; interval: use --interval-sec")
+parser.add_argument("--interval-sec", type=int, default=900, help="Interval when --align=interval")
+parser.add_argument("--timeframe", default="M15", help="Timeframe hint for alignment")
+args = parser.parse_args()
+SYMBOLS = args.symbols
+USER_ID = args.user_id
+USER_PATHS = get_user_paths(USER_ID)
 
 TIMEFRAME = mt5.TIMEFRAME_M15
 def get_current_config():
@@ -76,6 +87,24 @@ def get_current_config():
 def is_pm_session():
     now = datetime.now().time()
     return dt_time(17, 0) <= now <= dt_time(21, 0)
+
+
+def align_if_needed():
+    if args.align == "off":
+        return
+    interval = 900 if args.align == "quarter" else max(5, args.interval_sec or 900)
+    target = next_boundary_utc(interval_sec=interval, skew_sec=3)
+    print(f"[{now_utc().isoformat()}] Aligning to next boundary at {target.isoformat()} (interval={interval}s)")
+    sleep_until(target)
+
+
+def wait_for_new_closed_bar(symbol: str, mt5_timeframe) -> bool:
+    rates = mt5.copy_rates_from_pos(symbol, mt5_timeframe, 0, 3) or []
+    if not rates or len(rates) < 2:
+        return False
+    last_closed_epoch = rates[-2]["time"]
+    last_closed_dt = datetime.fromtimestamp(last_closed_epoch, tz=timezone.utc)
+    return (now_utc() - last_closed_dt) < timedelta(minutes=20)
 
 # === Parse AI Sentiment ===
 def parse_ai_sentiment(raw_response):
@@ -119,17 +148,21 @@ def log_ai_decision(symbol, ai_data, timestamp=None, extra_fields=None):
         "technical_score": ai_data.get("technical_score", "N/A"),
         "ema_trend": ai_data.get("ema_trend", "N/A"),
         "final_direction": ai_data.get("final_direction", "HOLD"),
-        "executed": ai_data.get("executed", False),
-        "ai_override": ai_data.get("ai_override", False),
+        "executed": str(ai_data.get("executed", False)),  # Convert bool to string
+        "ai_override": str(ai_data.get("ai_override", False)),  # Convert bool to string
         "override_reason": ai_data.get("override_reason", ""),
         "execution_source": ai_data.get("execution_source", "N/A")
     }
 
     if extra_fields:
+        # Convert any boolean values in extra_fields to strings
+        for key, value in extra_fields.items():
+            if isinstance(value, bool):
+                extra_fields[key] = str(value)
         entry.update(extra_fields)
 
     try:
-        with open("ai_decision_log.jsonl", "a") as f:
+        with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
         print(f"✅ AI decision logged for {symbol}")
     except Exception as e:
@@ -176,6 +209,7 @@ def run_bot():
         return
     
     # Send bot online notification
+    current_config = get_current_config()
     try:
         if not current_config.get("disable_telegram", True):
             send_bot_online_notification()
@@ -189,7 +223,7 @@ def run_bot():
     
     # Initialize heartbeat
     try:
-        with open("bot_heartbeat.json", "w") as f:
+        with open(USER_PATHS["state"] / "bot_heartbeat.json", "w", encoding="utf-8") as f:
             initial_heartbeat = {
                 "last_heartbeat": datetime.now().isoformat(),
                 "bot_status": "starting",
@@ -246,9 +280,23 @@ def run_bot():
             for symbol in SYMBOLS:
                 print(f"\n⏳ Analyzing {symbol}...")
 
-                # Check news protection before analysis
-                from news_guard import is_trade_blocked_by_news, get_high_impact_news
-                news_events = get_high_impact_news()
+                # Check news protection before analysis (manual news-only mode)
+                from pathlib import Path
+                import json as _json
+                from shared.settings import get_current_user_paths as _gcup
+                def _load_manual_news_blocks():
+                    paths = _gcup()
+                    if not paths:
+                        return []
+                    f = paths["state"] / "news_blocks.json"
+                    if not f.exists():
+                        return []
+                    try:
+                        return _json.loads(f.read_text(encoding="utf-8"))
+                    except Exception:
+                        return []
+                from news_guard import is_trade_blocked_by_news
+                news_events = _load_manual_news_blocks()
                 now = datetime.now()
                 
                 if is_trade_blocked_by_news(symbol, news_events, now):
@@ -269,7 +317,7 @@ def run_bot():
                         "override_reason": "News protection",
                         "execution_source": "news_block"
                     }
-                    with open("ai_decision_log.jsonl", "a") as f:
+                    with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
                         f.write(json.dumps(log_entry) + "\n")
                     continue
 
@@ -300,7 +348,7 @@ def run_bot():
                                 "override_reason": "USD time restriction",
                                 "execution_source": "usd_time_block"
                             }
-                            with open("ai_decision_log.jsonl", "a") as f:
+                            with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
                                 f.write(json.dumps(log_entry) + "\n")
                             continue
 
@@ -379,7 +427,7 @@ def run_bot():
                         "override_reason": "Risk guard",
                         "execution_source": "risk_block"
                     }
-                    with open("ai_decision_log.jsonl", "a") as f:
+                    with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
                         f.write(json.dumps(log_entry) + "\n")
                     continue
 
@@ -422,6 +470,7 @@ def run_bot():
                         override_reason = f"Technical score {technical_score} overrode AI HOLD"
 
                 success = False
+                sl_tp_result = None  # Initialize for logging
                 if final_direction in ["BUY", "SELL"]:
                     try:
                         if not mt5.terminal_info() or not mt5.version():
@@ -431,12 +480,35 @@ def run_bot():
                             initialize_mt5()
 
                         price = candles_m15.iloc[-1]["close"]
-                        sl, tp = calculate_dynamic_sl_tp(price, final_direction, candles_m15)
+                        
+                        # 🧱 NEW: Use structural SL/TP system with RRR validation
+                        print("🧱 Calculating structural SL/TP with market structure analysis...")
+                        sl_tp_result = calculate_structural_sl_tp_with_validation(
+                            candles_df=candles_m15,
+                            entry_price=price,
+                            direction=final_direction,
+                            session_time=datetime.now(),
+                            technical_score=technical_score
+                        )
+                        
+                        # 🛡️ RRR Validation - Block trades with insufficient risk-reward
+                        if not sl_tp_result["rrr_passed"]:
+                            print(f"❌ Trade BLOCKED by RRR validation: {sl_tp_result['rrr_reason']}")
+                            print(f"📊 Calculated RRR: {sl_tp_result['expected_rrr']:.3f}")
+                            print(f"🔍 SL Source: {sl_tp_result['sl_from']} | TP Source: {sl_tp_result['tp_from']}")
+                            continue  # Skip this trade completely
+                        
+                        # Extract validated SL/TP
+                        sl = sl_tp_result["sl"]
+                        tp = sl_tp_result["tp"]
+                        
                         lot_sizes = {k.upper(): v for k, v in current_config.get("LOT_SIZES", {}).items()}
                         lot = lot_sizes.get(symbol_key, current_config.get("lot_size", 1.0))
 
                         print(f"🧶 Resolved lot size for {symbol}: {lot}")
-                        print(f"🎯 Dynamic SL: {sl} | TP: {tp} | Lot: {lot}")
+                        print(f"🧱 Structural SL: {sl} ({sl_tp_result['sl_from']}) | TP: {tp} ({sl_tp_result['tp_from']})")
+                        print(f"⚖️ Expected RRR: {sl_tp_result['expected_rrr']:.3f} | Session: {sl_tp_result['session_adjustment']}")
+                        print(f"🏗️ Structures found: OB={sl_tp_result['structures_found']['ob_count']}, FVG={sl_tp_result['structures_found']['fvg_count']}, BOS={sl_tp_result['structures_found']['bos_count']}")
 
                         # Validate trade parameters before execution
                         if not validate_trade_parameters(symbol, lot, sl, tp):
@@ -474,13 +546,26 @@ def run_bot():
                     "technical_score": technical_score,
                     "ema_trend": ema_trend,
                     "final_direction": final_direction,
-                    "executed": success,
-                    "ai_override": final_direction != ai_direction,
+                    "executed": str(success),  # Convert bool to string
+                    "ai_override": str(final_direction != ai_direction),  # Convert bool to string
                     "override_reason": override_reason,
-                    "execution_source": execution_source
+                    "execution_source": execution_source,
+                    # 🧱 NEW: Structural SL/TP details
+                    "structural_sl_tp": {
+                        "sl": sl_tp_result.get("sl"),
+                        "tp": sl_tp_result.get("tp"),
+                        "expected_rrr": sl_tp_result.get("expected_rrr"),
+                        "rrr_passed": str(sl_tp_result.get("rrr_passed")) if sl_tp_result.get("rrr_passed") is not None else None,  # Convert bool to string
+                        "rrr_reason": sl_tp_result.get("rrr_reason"),
+                        "sl_from": sl_tp_result.get("sl_from"),
+                        "tp_from": sl_tp_result.get("tp_from"),
+                        "session_adjustment": sl_tp_result.get("session_adjustment"),
+                        "structures_found": sl_tp_result.get("structures_found"),
+                        "atr": sl_tp_result.get("atr")
+                    } if sl_tp_result is not None else None
                 }
 
-                with open("ai_decision_log.jsonl", "a") as f:
+                with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
                     f.write(json.dumps(log_entry) + "\n")
 
             apply_trailing_stop(minutes=30, trail_pips=20)
@@ -488,7 +573,7 @@ def run_bot():
             
             # Update heartbeat for GUI status monitoring (ALWAYS update, even if no trades)
             try:
-                # Update both locations to ensure GUI can find it
+                # Update per-user heartbeat
                 heartbeat_data = {
                     "last_heartbeat": datetime.now().isoformat(),
                     "bot_status": "running",
@@ -500,13 +585,7 @@ def run_bot():
                     "current_hour": now.hour,
                     "trading_window_active": current_config.get("restrict_usd_to_am", False)
                 }
-                
-                # Update Bot Core location
-                with open("bot_heartbeat.json", "w") as f:
-                    json.dump(heartbeat_data, f)
-                
-                # Also update root location for GUI
-                with open("../bot_heartbeat.json", "w") as f:
+                with open(USER_PATHS["state"] / "bot_heartbeat.json", "w", encoding="utf-8") as f:
                     json.dump(heartbeat_data, f)
                     
                 print(f"✅ Heartbeat updated at {now.strftime('%H:%M:%S')}")
@@ -532,8 +611,14 @@ def run_bot():
                     print(f"❌ Error refreshing news data: {e}")
             
             loop_count += 1
-            print(f"⏲ Waiting {DELAY_SECONDS / 60} minutes...")
-            time.sleep(DELAY_SECONDS)
+            if args.align == "off":
+                print(f"⏲ Waiting {DELAY_SECONDS / 60} minutes...")
+                time.sleep(DELAY_SECONDS)
+            else:
+                interval = 900 if args.align == "quarter" else (args.interval_sec or 900)
+                next_tick = next_boundary_utc(interval_sec=interval, skew_sec=3)
+                print(f"⏲ Sleeping until next boundary {next_tick.isoformat()}")
+                sleep_until(next_tick)
 
     except KeyboardInterrupt:
         print("🚑 Bot stopped by user.")

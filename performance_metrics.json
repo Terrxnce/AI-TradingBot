@@ -1,7 +1,7 @@
 {
   "overall_metrics": {
-    "total_trades": 64,
-    "executed_trades": 64,
+    "total_trades": 5,
+    "executed_trades": 5,
     "execution_rate": 1.0,
     "win_rate": 0,
     "profit_factor": 0,
@@ -10,81 +10,85 @@
     "max_drawdown": 0,
     "sharpe_ratio": 0,
     "risk_adjusted_return": 0,
-    "avg_lot_size": 0.29374999999999996,
-    "most_traded_symbol": "USDJPY",
+    "avg_lot_size": 0.9,
+    "most_traded_symbol": "NVDA",
     "most_active_session": "New_York"
   },
   "daily_metrics": {
-    "2025-07-21": {
-      "trades": 33,
-      "profit": 120.31000000000003,
-      "wins": 24,
-      "losses": 9,
-      "win_rate": 0.7272727272727273
+    "2025-08-06": {
+      "trades": 1,
+      "profit": 10000.0,
+      "wins": 1,
+      "losses": 0,
+      "win_rate": 1.0
     },
-    "2025-07-22": {
-      "trades": 14,
-      "profit": 112.17000000000002,
-      "wins": 11,
-      "losses": 3,
-      "win_rate": 0.7857142857142857
+    "2025-08-07": {
+      "trades": 1,
+      "profit": 3.94,
+      "wins": 1,
+      "losses": 0,
+      "win_rate": 1.0
     },
-    "2025-07-23": {
-      "trades": 6,
-      "profit": 119.61,
-      "wins": 3,
-      "losses": 3,
+    "2025-08-08": {
+      "trades": 2,
+      "profit": -83.39999999999999,
+      "wins": 1,
+      "losses": 1,
       "win_rate": 0.5
     },
-    "2025-07-24": {
-      "trades": 4,
-      "profit": 35.300000000000004,
-      "wins": 4,
-      "losses": 0,
-      "win_rate": 1.0
-    },
-    "2025-07-25": {
-      "trades": 5,
-      "profit": -260.01,
-      "wins": 2,
-      "losses": 3,
-      "win_rate": 0.4
-    },
-    "2025-07-28": {
-      "trades": 2,
-      "profit": 121.47,
-      "wins": 2,
-      "losses": 0,
-      "win_rate": 1.0
+    "2025-08-11": {
+      "trades": 1,
+      "profit": -57.55,
+      "wins": 0,
+      "losses": 1,
+      "win_rate": 0.0
     }
   },
   "symbol_metrics": {
     "USDJPY": {
-      "trades": 64,
-      "profit": 248.84999999999997,
-      "win_rate": 0.71875,
-      "average_trade": 3.8882812499999995
+      "trades": 1,
+      "profit": -57.55,
+      "win_rate": 0.0,
+      "average_trade": -57.55
+    },
+    "GBPJPY": {
+      "trades": 1,
+      "profit": -87.13,
+      "win_rate": 0.0,
+      "average_trade": -87.13
+    },
+    "NVDA": {
+      "trades": 2,
+      "profit": 7.67,
+      "win_rate": 1.0,
+      "average_trade": 3.835
+    },
+    "": {
+      "trades": 1,
+      "profit": 10000.0,
+      "win_rate": 1.0,
+      "average_trade": 10000.0
     }
   },
   "session_metrics": {
-    "New_York": {
-      "trades": 47,
-      "profit": 452.94000000000005,
-      "win_rate": 0.7872340425531915,
-      "average_trade": 9.637021276595746
+    "Asia": {
+      "trades": 1,
+      "profit": -57.55,
+      "win_rate": 0.0,
+      "average_trade": -57.55
     },
     "Post_Market": {
-      "trades": 9,
-      "profit": -101.56000000000002,
-      "win_rate": 0.3333333333333333,
-      "average_trade": -11.284444444444446
+      "trades": 1,
+      "profit": -87.13,
+      "win_rate": 0.0,
+      "average_trade": -87.13
     },
-    "Asia": {
-      "trades": 8,
-      "profit": -102.52999999999999,
-      "win_rate": 0.75,
-      "average_trade": -12.816249999999998
+    "New_York": {
+      "trades": 3,
+      "profit": 10007.67,
+      "win_rate": 1.0,
+      "average_trade": 3335.89
     }
   },
-  "generated_at": "2025-07-29T02:06:39.839949"
+  "generated_at": "2025-08-11T20:01:47.656327"
 }

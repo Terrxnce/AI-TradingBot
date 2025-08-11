@@ -1,0 +1,23 @@
+[
+  {
+    "event_name": "USD Non-Farm Payrolls",
+    "impact_level": "High",
+    "symbols_affected": ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD"],
+    "event_time_utc": "2025-08-09T13:30:00Z",
+    "buffer_minutes": 60
+  },
+  {
+    "event_name": "EUR Interest Rate Decision",
+    "impact_level": "High", 
+    "symbols_affected": ["EURUSD", "EURGBP", "EURJPY"],
+    "event_time_utc": "2025-08-10T12:00:00Z",
+    "buffer_minutes": 45
+  },
+  {
+    "event_name": "UK GDP Release",
+    "impact_level": "Medium",
+    "symbols_affected": ["GBPUSD", "EURGBP", "GBPJPY"],
+    "event_time_utc": "2025-08-11T08:30:00Z",
+    "buffer_minutes": 30
+  }
+]

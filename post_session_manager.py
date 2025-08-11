@@ -20,6 +20,7 @@ import json
 from datetime import datetime, timedelta
 sys.path.append(os.path.join(os.path.dirname(__file__), 'Data Files'))
 from config import CONFIG
+# Note: parse_ai_response is not needed here; normalize locally to avoid cross-package import
 from session_utils import is_post_session, get_post_session_time_remaining, is_post_session_extension_allowed, get_post_session_lot_size
 
 # State file for tracking post-session trades
@@ -79,14 +80,21 @@ def is_post_session_trade_eligible(symbol, technical_score, ai_confidence=0):
         return False, "Post-session trading disabled"
     
     score_threshold = CONFIG.get("post_session_score_threshold", 8.0)
-    min_confidence = CONFIG.get("post_session_min_ai_confidence", 70)
+    # Normalize confidence to 0–10 scale
+    try:
+        ai_conf = float(ai_confidence)
+    except Exception:
+        ai_conf = 0.0
+    if ai_conf > 10:
+        ai_conf /= 10.0
+    min_confidence = CONFIG.get("post_session_min_ai_confidence", 7.0)
     
     # Check technical score requirement
     if technical_score < score_threshold:
         return False, f"Technical score {technical_score} below threshold {score_threshold}"
     
     # Check AI confidence if score is borderline
-    if technical_score < 8.0 and ai_confidence < min_confidence:
+    if technical_score < 8.0 and ai_conf < min_confidence:
         return False, f"AI confidence {ai_confidence}% below minimum {min_confidence}%"
     
     # Check re-entry limits

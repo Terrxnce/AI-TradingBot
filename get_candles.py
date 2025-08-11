@@ -3,26 +3,13 @@ import pandas as pd
 from datetime import datetime
 
 def fetch_mt5_data(symbol="EURUSD", timeframe=mt5.TIMEFRAME_M15, bars=200):
+    """Fetch candle data assuming MT5 is already initialized by the caller.
+
+    Returns empty DataFrame on failure instead of managing MT5 lifecycle here.
     """
-    Connects to MetaTrader 5 and retrieves historical OHLCV candle data.
-
-    Args:
-        symbol (str): Symbol to fetch (e.g., "EURUSD").
-        timeframe: MT5 timeframe constant (e.g., mt5.TIMEFRAME_M15).
-        bars (int): Number of bars to retrieve.
-
-    Returns:
-        pd.DataFrame: DataFrame with time, open, high, low, close, and tick_volume.
-    """
-    if not mt5.initialize():
-        raise Exception("❌ MT5 initialization failed. Make sure MetaTrader is installed, logged in, and the symbol is valid.")
-
     rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, bars)
     if rates is None or len(rates) == 0:
-        mt5.shutdown()
-        raise Exception("❌ Failed to fetch data from MT5.")
-
-    mt5.shutdown()
+        return pd.DataFrame()
 
     df = pd.DataFrame(rates)
     df['time'] = pd.to_datetime(df['time'], unit='s')

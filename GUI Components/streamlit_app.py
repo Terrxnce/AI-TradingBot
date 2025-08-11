@@ -49,15 +49,63 @@ except ImportError:
         sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
         from performance_metrics import performance_metrics
     except ImportError:
-        # Create a dummy performance_metrics if import fails
-        class DummyPerformanceMetrics:
-            def generate_performance_report(self):
-                return {'overall_metrics': {}}
-            def get_mt5_account_balance(self):
-                return 10000 # Default balance for dummy
-            def get_mt5_account_equity(self):
-                return 10000 # Default equity for dummy
-        performance_metrics = DummyPerformanceMetrics()
+        try:
+            # Try direct import from parent directory
+            import sys
+            import os
+            sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+            from performance_metrics import performance_metrics
+        except ImportError:
+            # Create a dummy performance_metrics if import fails
+            class DummyPerformanceMetrics:
+                def generate_performance_report(self):
+                    return {'overall_metrics': {}}
+                def get_mt5_account_balance(self):
+                    # Try to get real MT5 data even in dummy mode
+                    try:
+                        import MetaTrader5 as mt5
+                        if mt5.initialize():
+                            account_info = mt5.account_info()
+                            mt5.shutdown()
+                            if account_info:
+                                return account_info.balance
+                    except:
+                        pass
+                    return 10000 # Fallback balance for dummy
+                def get_mt5_account_equity(self):
+                    # Try to get real MT5 data even in dummy mode
+                    try:
+                        import MetaTrader5 as mt5
+                        if mt5.initialize():
+                            account_info = mt5.account_info()
+                            mt5.shutdown()
+                            if account_info:
+                                return account_info.equity
+                    except:
+                        pass
+                    return 10000 # Fallback equity for dummy
+            performance_metrics = DummyPerformanceMetrics()
+
+# Try to import account_manager with fallback
+try:
+    from account_manager import initialize_account_system
+    account_manager, data_source = initialize_account_system()
+except Exception:
+    # Create dummy account manager and data source if import fails
+    class DummyAccountManager:
+        def get_account_info(self):
+            return {"account_type": "demo", "balance": 10000, "currency": "USD", "leverage": 100, "active": True}
+        def get_current_account(self):
+            return {"type": "demo", "balance": 10000, "active": True}
+    
+    class DummyDataSource:
+        def is_connected(self):
+            return True
+        def connect(self):
+            return True
+    
+    account_manager = DummyAccountManager()
+    data_source = DummyDataSource()
 
 import time
 
@@ -161,33 +209,68 @@ def load_bot_heartbeat():
         st.error(f"Error loading heartbeat: {e}")
         return None
 
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data(ttl=60)  # Cache for 1 minute only for more real-time updates
 def load_mt5_trade_history(days=30):
     """Load MT5 trade history"""
     try:
+        # Try to initialize MT5 connection
         if not mt5.initialize():
+            st.warning("⚠️ Cannot connect to MT5. Make sure MT5 terminal is running and logged in.")
             return pd.DataFrame()
         
-        # Get more history to ensure we capture all trades
-        utc_from = datetime(2025, 7, 21)  # From July 21st
+        # Get history from the last 30 days (or specified days)
         utc_to = datetime.now()
+        utc_from = utc_to - timedelta(days=days)
+        
+        # Get deals from MT5
         deals = mt5.history_deals_get(utc_from, utc_to)
+        
+        # Close MT5 connection
         mt5.shutdown()
 
         if not deals:
+            st.info("ℹ️ No trade history found in the specified date range. This could mean:")
+            st.info("• No trades have been executed recently")
+            st.info("• MT5 account is new or recently cleared")
+            st.info("• Date range doesn't include trading activity")
             return pd.DataFrame()
 
+        # Convert to DataFrame
         deals_df = pd.DataFrame(list(deals), columns=deals[0]._asdict().keys())
-        deals_df = deals_df[["symbol", "time", "type", "volume", "price", "profit"]]
-        deals_df["time"] = pd.to_datetime(deals_df["time"], unit="s")
-        deals_df["type"] = deals_df["type"].apply(lambda x: "BUY" if x == 0 else "SELL")
         
-        # Sort by time (newest first)
-        deals_df = deals_df.sort_values('time', ascending=False)
+        # Select relevant columns
+        if len(deals_df) > 0:
+            # Ensure we have the required columns
+            required_cols = ["symbol", "time", "type", "volume", "price", "profit"]
+            available_cols = [col for col in required_cols if col in deals_df.columns]
+            
+            if not available_cols:
+                st.error("❌ MT5 data structure is unexpected. Cannot display trade history.")
+                return pd.DataFrame()
+            
+            deals_df = deals_df[available_cols]
+            
+            # Convert time from timestamp to readable format
+            deals_df["time"] = pd.to_datetime(deals_df["time"], unit="s")
+            
+            # Convert type numbers to readable format
+            if "type" in deals_df.columns:
+                deals_df["type"] = deals_df["type"].apply(lambda x: "BUY" if x == 0 else "SELL" if x == 1 else f"TYPE_{x}")
+            
+            # Sort by time (newest first)
+            deals_df = deals_df.sort_values('time', ascending=False)
+            
+            # Add debug info
+            st.success(f"✅ Loaded {len(deals_df)} MT5 deals from {utc_from.strftime('%Y-%m-%d')} to {utc_to.strftime('%Y-%m-%d')}")
         
         return deals_df
+        
     except Exception as e:
-        st.error(f"Error loading MT5 trade history: {e}")
+        st.error(f"❌ Error loading MT5 trade history: {e}")
+        st.error("Please check:")
+        st.error("• MT5 terminal is running and logged in")
+        st.error("• Account has trading permissions")
+        st.error("• MetaTrader5 Python package is installed")
         return pd.DataFrame()
 
 def sync_trade_log_with_mt5():
@@ -196,9 +279,13 @@ def sync_trade_log_with_mt5():
         if not mt5.initialize():
             return False
         
-        # Get all deals from July 21st onwards
-        utc_from = datetime(2025, 7, 21)
+        # Get current account info for tracking
+        account_info = mt5.account_info()
+        current_account = str(account_info.login) if account_info else "Unknown"
+        
+        # Get all deals from the last 60 days to capture more history
         utc_to = datetime.now()
+        utc_from = utc_to - timedelta(days=60)
         deals = mt5.history_deals_get(utc_from, utc_to)
         mt5.shutdown()
 
@@ -208,28 +295,34 @@ def sync_trade_log_with_mt5():
         # Convert to DataFrame
         deals_df = pd.DataFrame(list(deals), columns=deals[0]._asdict().keys())
         
-        # Filter for USDJPY trades only and exclude non-trade deals
+        # Filter for actual trades only (exclude non-trade deals)
         # Only include deals with type 0 (BUY) or 1 (SELL) - actual trades
-        usdjpy_trades = deals_df[
-            (deals_df['symbol'] == 'USDJPY') & 
-            (deals_df['type'].isin([0, 1]))  # Only BUY/SELL trades
+        # Include ALL symbols, not just USDJPY
+        actual_trades = deals_df[
+            deals_df['type'].isin([0, 1])  # Only BUY/SELL trades, all symbols
         ].copy()
         
-        if usdjpy_trades.empty:
+        if actual_trades.empty:
+            st.warning(f"⚠️ No actual trades (BUY/SELL) found for account {current_account} in last 60 days")
+            st.info(f"📊 Found {len(deals_df)} total deals, but none were actual trades")
+            if not deals_df.empty and 'type' in deals_df.columns:
+                deal_types = deals_df['type'].value_counts()
+                st.info(f"📈 Deal types found: {deal_types.to_dict()}")
             return False
         
-        # Format for CSV trade log
+        # Format for CSV trade log with account info
         trade_log_data = []
-        for _, deal in usdjpy_trades.iterrows():
+        for _, deal in actual_trades.iterrows():
             trade_data = {
                 "timestamp": pd.to_datetime(deal['time'], unit='s'),
                 "symbol": deal['symbol'],
-                "direction": "BUY" if deal['type'] == 0 else "SELL",
+                "action": "BUY" if deal['type'] == 0 else "SELL",  # Use 'action' to match existing CSV format
                 "lot": deal['volume'],
+                "price": deal['price'],
                 "sl": 0,  # MT5 doesn't provide SL/TP in deals
                 "tp": 0,
-                "entry_price": deal['price'],
-                "result": "EXECUTED"  # All historical deals are executed
+                "result": "EXECUTED",  # All historical deals are executed
+                "account": current_account  # Add account tracking
             }
             trade_log_data.append(trade_data)
         
@@ -237,11 +330,21 @@ def sync_trade_log_with_mt5():
         trade_log_df = pd.DataFrame(trade_log_data)
         trade_log_df = trade_log_df.sort_values('timestamp', ascending=False)
         
-        # Save to the correct path
-        log_path = os.path.join(os.path.dirname(__file__), "..", "Bot Core", "logs", "trade_log.csv")
-        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-        trade_log_df.to_csv(log_path, index=False)
+        # Save to both locations for compatibility
+        log_paths = [
+            os.path.join(os.path.dirname(__file__), "..", "Data Files", "trade_log.csv"),
+            os.path.join(os.path.dirname(__file__), "..", "Bot Core", "logs", "trade_log.csv")
+        ]
         
+        for log_path in log_paths:
+            try:
+                os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                trade_log_df.to_csv(log_path, index=False)
+            except Exception as e:
+                print(f"Warning: Could not save to {log_path}: {e}")
+        
+        st.success(f"✅ Synced {len(trade_log_df)} trades from MT5 account {current_account}")
+        st.info(f"📊 Included symbols: {', '.join(trade_log_df['symbol'].unique())}")
         print(f"✅ Synced {len(trade_log_df)} trades from MT5")
         return True
         
@@ -485,6 +588,318 @@ def render_config_editor():
         if st.button("📦 View Backups"):
             st.session_state.show_backups = True
 
+    # Manual News Event Manager
+    st.markdown("---")
+    render_news_event_manager()
+
+def render_news_event_manager():
+    """Render the Manual News Event Manager"""
+    
+    # Initialize session state for form
+    if 'edit_event_index' not in st.session_state:
+        st.session_state.edit_event_index = None
+    if 'show_confirm_clear' not in st.session_state:
+        st.session_state.show_confirm_clear = False
+    
+    with st.expander("📰 Manual News Protection Control", expanded=False):
+        st.markdown("### 🛡️ High-Impact Economic Events Manager")
+        st.caption("Add, edit, and delete economic events that trigger trading protection")
+        
+        # Load existing events
+        news_events = load_news_events()
+        
+        # Get available symbols from config for multi-select
+        config_data = config_manager.load_config()
+        if config_data and config_data.get("CONFIG"):
+            # Extract symbols from config - look for common symbol fields
+            available_symbols = ["EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", 
+                               "EURGBP", "EURJPY", "GBPJPY", "XAUUSD", "US500.cash", "NVDA", "AAPL"]
+        else:
+            available_symbols = ["EURUSD", "GBPUSD", "USDJPY", "XAUUSD"]
+        
+        # Form for adding/editing events
+        st.markdown("#### ➕ Add New Event")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Pre-fill form if editing
+            if st.session_state.edit_event_index is not None and st.session_state.edit_event_index < len(news_events):
+                edit_event = news_events[st.session_state.edit_event_index]
+                default_name = edit_event.get("event_name", "")
+                default_impact = edit_event.get("impact_level", "High")
+                default_symbols = edit_event.get("symbols_affected", [])
+                default_buffer = edit_event.get("buffer_minutes", 30)
+                # Parse datetime
+                try:
+                    event_datetime = datetime.fromisoformat(edit_event.get("event_time_utc", "").replace("Z", "+00:00"))
+                    default_date = event_datetime.date()
+                    default_time = event_datetime.time()
+                except:
+                    default_date = datetime.now().date()
+                    default_time = datetime.now().time()
+                form_title = "✏️ Edit Event"
+                button_text = "💾 Update Event"
+            else:
+                default_name = ""
+                default_impact = "High"
+                default_symbols = []
+                default_buffer = 30
+                default_date = datetime.now().date()
+                default_time = datetime.now().time()
+                form_title = "➕ Add New Event"
+                button_text = "💾 Add Event"
+            
+            st.markdown(f"**{form_title}**")
+            
+            event_name = st.text_input(
+                "Event Name",
+                value=default_name,
+                placeholder="e.g., USD Non-Farm Payrolls",
+                key="news_event_name"
+            )
+            
+            impact_level = st.selectbox(
+                "Impact Level",
+                ["High", "Medium", "Low"],
+                index=["High", "Medium", "Low"].index(default_impact),
+                key="news_impact_level"
+            )
+            
+            symbols_affected = st.multiselect(
+                "Symbols Affected",
+                options=available_symbols,
+                default=default_symbols,
+                key="news_symbols_affected"
+            )
+        
+        with col2:
+            st.markdown("**📅 Event Timing**")
+            
+            event_date = st.date_input(
+                "Event Date (UTC)",
+                value=default_date,
+                key="news_event_date"
+            )
+            
+            event_time = st.time_input(
+                "Event Time (UTC)",
+                value=default_time,
+                key="news_event_time"
+            )
+            
+            buffer_minutes = st.number_input(
+                "Buffer Time (minutes)",
+                min_value=0,
+                max_value=480,
+                value=default_buffer,
+                step=5,
+                help="Time before/after event to avoid trading",
+                key="news_buffer_minutes"
+            )
+        
+        # Form buttons
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            if st.button(button_text, type="primary"):
+                if event_name and symbols_affected:
+                    # Combine date and time to UTC datetime
+                    event_datetime = datetime.combine(event_date, event_time)
+                    event_time_utc = event_datetime.isoformat() + "Z"
+                    
+                    new_event = {
+                        "event_name": event_name,
+                        "impact_level": impact_level,
+                        "symbols_affected": symbols_affected,
+                        "event_time_utc": event_time_utc,
+                        "buffer_minutes": buffer_minutes
+                    }
+                    
+                    if st.session_state.edit_event_index is not None:
+                        # Update existing event
+                        news_events[st.session_state.edit_event_index] = new_event
+                        st.success(f"✅ Updated event: {event_name}")
+                        st.session_state.edit_event_index = None
+                    else:
+                        # Add new event
+                        news_events.append(new_event)
+                        st.success(f"✅ Added event: {event_name}")
+                    
+                    # Save to file
+                    save_news_events(news_events)
+                    st.rerun()
+                else:
+                    st.error("❌ Please fill in Event Name and select at least one Symbol")
+        
+        with col2:
+            if st.session_state.edit_event_index is not None:
+                if st.button("❌ Cancel Edit"):
+                    st.session_state.edit_event_index = None
+                    st.rerun()
+        
+        # Events table
+        st.markdown("---")
+        st.markdown("#### 📋 Upcoming Events")
+        
+        if news_events:
+            # Sort events by datetime
+            try:
+                sorted_events = sorted(news_events, key=lambda x: datetime.fromisoformat(x.get("event_time_utc", "").replace("Z", "+00:00")))
+            except:
+                sorted_events = news_events
+            
+            # Display events table
+            for idx, event in enumerate(sorted_events):
+                try:
+                    event_datetime = datetime.fromisoformat(event.get("event_time_utc", "").replace("Z", "+00:00"))
+                    formatted_time = event_datetime.strftime("%Y-%m-%d %H:%M UTC")
+                except:
+                    formatted_time = event.get("event_time_utc", "Invalid time")
+                
+                # Color code by impact level
+                impact_color = {
+                    "High": "🔴",
+                    "Medium": "🟡", 
+                    "Low": "🟢"
+                }.get(event.get("impact_level", "High"), "🔴")
+                
+                symbols_str = ", ".join(event.get("symbols_affected", []))
+                buffer_str = f"{event.get('buffer_minutes', 30)}min"
+                
+                col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
+                
+                with col1:
+                    st.write(f"**{event.get('event_name', 'Unknown Event')}**")
+                    st.caption(f"📅 {formatted_time}")
+                
+                with col2:
+                    st.write(f"{impact_color} {event.get('impact_level', 'High')}")
+                    st.caption(f"🎯 {symbols_str}")
+                    st.caption(f"⏱️ Buffer: {buffer_str}")
+                
+                with col3:
+                    if st.button("✏️ Edit", key=f"edit_{idx}"):
+                        # Find the original index in unsorted list
+                        original_idx = news_events.index(event)
+                        st.session_state.edit_event_index = original_idx
+                        st.rerun()
+                
+                with col4:
+                    if st.button("🗑️ Delete", key=f"delete_{idx}"):
+                        # Find the original index in unsorted list
+                        original_idx = news_events.index(event)
+                        news_events.pop(original_idx)
+                        save_news_events(news_events)
+                        st.success(f"✅ Deleted: {event.get('event_name', 'Event')}")
+                        st.rerun()
+                
+                st.markdown("---")
+        else:
+            st.info("📭 No upcoming events configured")
+            st.caption("Add events above to enable news protection")
+        
+        # Quick Controls
+        st.markdown("#### ⚡ Quick Controls")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("🗑️ Clear All Events"):
+                st.session_state.show_confirm_clear = True
+        
+        with col2:
+            if st.button("📁 Export Events"):
+                if news_events:
+                    # Convert to DataFrame for CSV export
+                    export_data = []
+                    for event in news_events:
+                        try:
+                            event_datetime = datetime.fromisoformat(event.get("event_time_utc", "").replace("Z", "+00:00"))
+                            formatted_time = event_datetime.strftime("%Y-%m-%d %H:%M UTC")
+                        except:
+                            formatted_time = event.get("event_time_utc", "")
+                        
+                        export_data.append({
+                            "Event Name": event.get("event_name", ""),
+                            "Event Time (UTC)": formatted_time,
+                            "Impact Level": event.get("impact_level", ""),
+                            "Symbols": ", ".join(event.get("symbols_affected", [])),
+                            "Buffer (minutes)": event.get("buffer_minutes", "")
+                        })
+                    
+                    df = pd.DataFrame(export_data)
+                    csv = df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download CSV",
+                        data=csv,
+                        file_name=f"news_events_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
+                    )
+                else:
+                    st.warning("⚠️ No events to export")
+        
+        with col3:
+            if st.button("🔄 Force Refresh Bot"):
+                # Create reload signal for bot
+                create_bot_reload_signal()
+                st.success("✅ Bot reload signal sent!")
+                st.info("🤖 Bot will reload news events on next cycle")
+        
+        # Confirmation dialog for clear all
+        if st.session_state.show_confirm_clear:
+            st.error("⚠️ **Confirm Clear All Events**")
+            st.write("This will permanently delete all configured news events.")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Yes, Clear All", type="primary"):
+                    save_news_events([])  # Save empty list
+                    st.session_state.show_confirm_clear = False
+                    st.success("✅ All events cleared")
+                    st.rerun()
+            
+            with col2:
+                if st.button("❌ Cancel"):
+                    st.session_state.show_confirm_clear = False
+                    st.rerun()
+
+def load_news_events():
+    """Load news events from JSON file"""
+    news_file = "Data Files/news_events.json"
+    try:
+        if os.path.exists(news_file):
+            with open(news_file, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        else:
+            return []
+    except Exception as e:
+        st.error(f"Error loading news events: {e}")
+        return []
+
+def save_news_events(events):
+    """Save news events to JSON file"""
+    news_file = "Data Files/news_events.json"
+    try:
+        os.makedirs(os.path.dirname(news_file), exist_ok=True)
+        with open(news_file, 'w', encoding='utf-8') as f:
+            json.dump(events, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        st.error(f"Error saving news events: {e}")
+        return False
+
+def create_bot_reload_signal():
+    """Create a signal file to notify bot to reload news events"""
+    try:
+        signal_file = "bot_reload_news.flag"
+        with open(signal_file, 'w') as f:
+            f.write(datetime.now().isoformat())
+        return True
+    except Exception as e:
+        st.error(f"Error creating reload signal: {e}")
+        return False
+
 def render_trade_logs():
     """Render the trade logs section"""
     st.header("📊 Trade Logs & History")
@@ -493,18 +908,78 @@ def render_trade_logs():
     csv_trades = log_processor.load_trade_log()
     mt5_trades = load_mt5_trade_history()
     
+    # Check for account mismatch warning
+    current_mt5_account = None
+    try:
+        if mt5.initialize():
+            account_info = mt5.account_info()
+            if account_info:
+                current_mt5_account = str(account_info.login)
+            mt5.shutdown()
+    except:
+        pass
+    
+    # Show account mismatch warning if needed
+    if current_mt5_account and not csv_trades.empty:
+        st.warning(f"⚠️ **Account Data Mismatch Detected!**")
+        st.warning(f"• Current MT5 Account: **{current_mt5_account}**")
+        st.warning(f"• CSV Trade Log: **{len(csv_trades)} trades** (may be from different account)")
+        st.warning(f"• This CSV data is **NOT account-specific** and may show trades from previous accounts")
+        
+        # Add buttons to manage account data
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🗑️ Clear Old Account Data", key="clear_old_data"):
+                # Clear the old trade log
+                try:
+                    with open(log_processor.trade_log_file, 'w') as f:
+                        f.write("timestamp,symbol,action,lot,price,sl,tp,result,account\n")  # Write header with account column
+                    st.success("✅ Cleared old trade log data")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error clearing data: {e}")
+        
+        with col2:
+            if st.button("🔄 Populate Current Account Data", key="populate_current_data"):
+                # Clear old data and sync with current account
+                try:
+                    # Clear old data first
+                    with open(log_processor.trade_log_file, 'w') as f:
+                        f.write("timestamp,symbol,action,lot,price,sl,tp,result,account\n")
+                    
+                    # Then sync with current account
+                    if sync_trade_log_with_mt5():
+                        st.success(f"✅ Populated with trades from account {current_mt5_account}")
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ No trades found for current account in last 60 days")
+                except Exception as e:
+                    st.error(f"❌ Error populating data: {e}")
+        
+        st.info("💡 **Recommendation**: Clear old data and use 'Sync with MT5' to populate with current account trades")
+    
     tab1, tab2, tab3 = st.tabs(["📈 CSV Trade Log", "🔴 Live MT5 History", "⚡ Current Positions"])
     
     with tab1:
         st.subheader("CSV Trade Log")
         
-        # Add sync button
-        if st.button("🔄 Sync with MT5", key="sync_trades"):
-            if sync_trade_log_with_mt5():
-                st.success("✅ Trade log synced with MT5 data!")
-                st.rerun()
+        # Add sync button with account info
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if current_mt5_account:
+                st.info(f"📊 Ready to sync trades for account: **{current_mt5_account}**")
             else:
-                st.error("❌ Failed to sync trade log")
+                st.warning("⚠️ Cannot detect current MT5 account")
+        with col2:
+            if st.button("🔄 Sync with MT5", key="sync_trades"):
+                if current_mt5_account:
+                    if sync_trade_log_with_mt5():
+                        st.success(f"✅ Trade log synced with MT5 data for account {current_mt5_account}!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to sync with MT5")
+                else:
+                    st.error("❌ Cannot sync - MT5 account not detected")
         
         csv_trades = log_processor.load_trade_log()
         
@@ -589,23 +1064,71 @@ def render_trade_logs():
         st.subheader("Live MT5 Trade History")
         st.info("Note: This shows all MT5 deals (including non-trade transactions)")
         
+        # Add controls for MT5 history
+        col1, col2, col3 = st.columns([2, 1, 1])
+        with col1:
+            days_to_search = st.selectbox(
+                "📅 Search Period",
+                [7, 14, 30, 60, 90],
+                index=2,  # Default to 30 days
+                help="Number of days to search for trade history"
+            )
+        with col2:
+            if st.button("🔄 Refresh", key="refresh_mt5_history"):
+                st.cache_data.clear()
+                st.rerun()
+        with col3:
+            if st.button("🔍 Search", key="search_mt5_history"):
+                # Clear cache and reload with new date range
+                st.cache_data.clear()
+                # Load with custom date range
+                mt5_trades = load_mt5_trade_history(days=days_to_search)
+                st.rerun()
+        
         # Get actual MT5 account balance
         mt5_balance = performance_metrics.get_mt5_account_balance()
+        
+        # Debug information
+        with st.expander("🔍 Debug Info - MT5 Connection Status"):
+            try:
+                # Test MT5 connection
+                if mt5.initialize():
+                    account_info = mt5.account_info()
+                    if account_info:
+                        st.success(f"✅ MT5 Connected - Account: {account_info.login}")
+                        st.info(f"📊 Account Balance: ${account_info.balance:,.2f}")
+                        st.info(f"💰 Account Equity: ${account_info.equity:,.2f}")
+                    else:
+                        st.warning("⚠️ MT5 connected but no account info available")
+                    
+                    # Test if we can get any deals at all
+                    test_from = datetime.now() - timedelta(days=90)  # Last 90 days
+                    test_to = datetime.now()
+                    test_deals = mt5.history_deals_get(test_from, test_to)
+                    
+                    if test_deals:
+                        st.success(f"✅ Found {len(test_deals)} total deals in last 90 days")
+                    else:
+                        st.warning("⚠️ No deals found in last 90 days")
+                    
+                    mt5.shutdown()
+                else:
+                    st.error("❌ Cannot connect to MT5")
+            except Exception as e:
+                st.error(f"❌ MT5 Debug Error: {e}")
         
         if not mt5_trades.empty:
             # Filter for actual trades only (BUY/SELL)
             actual_trades = mt5_trades[mt5_trades['type'].isin(['BUY', 'SELL'])]
             
-            # Filter for USDJPY trades only for display
-            usdjpy_trades = actual_trades[actual_trades['symbol'] == 'USDJPY']
-            
-            st.dataframe(usdjpy_trades, use_container_width=True)
+            # Show ALL trades, not just USDJPY
+            st.dataframe(actual_trades, use_container_width=True)
             
             # Quick stats
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                st.metric("Total Trades", len(usdjpy_trades))
+                st.metric("Total Trades", len(actual_trades))
             
             with col2:
                 # Show actual account balance instead of calculated P&L
@@ -615,18 +1138,29 @@ def render_trade_logs():
                     st.metric("Account Balance", "N/A")
             
             with col3:
-                avg_volume = usdjpy_trades['volume'].mean() if not usdjpy_trades.empty else 0
+                avg_volume = actual_trades['volume'].mean() if not actual_trades.empty else 0
                 st.metric("Avg Volume", f"{avg_volume:.2f}")
             
             with col4:
                 # Show most recent trade
-                if not usdjpy_trades.empty:
-                    latest_trade = usdjpy_trades.iloc[0]  # Already sorted by time
+                if not actual_trades.empty:
+                    latest_trade = actual_trades.iloc[0]  # Already sorted by time
                     st.metric("Latest Trade", f"{latest_trade['symbol']} {latest_trade['type']}")
                 else:
                     st.metric("Latest Trade", "N/A")
         else:
-            st.info("No MT5 trade history available")
+            st.info("📭 No MT5 trade history available")
+            st.info("This could happen if:")
+            st.info("• No trades have been executed on this account")
+            st.info("• The account is new or recently reset")
+            st.info("• MT5 connection is failing")
+            st.info("• Trading history is outside the default 30-day range")
+            
+            # Show what we tried to load
+            st.caption("ℹ️ Searching for trades in the last 30 days...")
+            
+            # Suggest using the debug info
+            st.info("💡 Use the 'Debug Info' section above to check MT5 connection status")
     
     with tab3:
         st.subheader("Current Open Positions")
@@ -1087,6 +1621,64 @@ def main():
             else:
                 st.error("❌ MT5 Disconnected")
         
+        # Account Information Row
+        st.markdown("### 💰 Account Information")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            # Get current account balance
+            try:
+                balance = performance_metrics.get_mt5_account_balance()
+                if balance is not None:
+                    st.metric("Account Balance", f"${balance:,.2f}")
+                else:
+                    st.metric("Account Balance", "N/A")
+            except:
+                st.metric("Account Balance", "Error")
+        
+        with col2:
+            # Get current account equity
+            try:
+                equity = performance_metrics.get_mt5_account_equity()
+                if equity is not None:
+                    st.metric("Account Equity", f"${equity:,.2f}")
+                else:
+                    st.metric("Account Equity", "N/A")
+            except:
+                st.metric("Account Equity", "Error")
+        
+        with col3:
+            # Calculate floating P&L
+            try:
+                balance = performance_metrics.get_mt5_account_balance()
+                equity = performance_metrics.get_mt5_account_equity()
+                if balance is not None and equity is not None:
+                    floating_pnl = equity - balance
+                    if floating_pnl >= 0:
+                        st.metric("Floating P&L", f"+${floating_pnl:,.2f}", delta=floating_pnl)
+                    else:
+                        st.metric("Floating P&L", f"-${abs(floating_pnl):,.2f}", delta=floating_pnl)
+                else:
+                    st.metric("Floating P&L", "N/A")
+            except:
+                st.metric("Floating P&L", "Error")
+        
+        with col4:
+            # Show account info (login number, server, etc.)
+            try:
+                import MetaTrader5 as mt5
+                if mt5.initialize():
+                    account_info = mt5.account_info()
+                    if account_info:
+                        st.metric("Account #", str(account_info.login))
+                    else:
+                        st.metric("Account #", "N/A")
+                    mt5.shutdown()
+                else:
+                    st.metric("Account #", "Disconnected")
+            except:
+                st.metric("Account #", "Error")
+        
         # News protection status
         news_protection = heartbeat_data.get("news_protection_active", False)
         if news_protection:
@@ -1114,6 +1706,70 @@ def main():
             from analytics_dashboard import AnalyticsDashboard
             # Clear cache for real-time updates
             st.cache_data.clear()
+            
+            # Force refresh analytics dashboard data for account switching
+            import os
+            balance_history_files = [
+                "Data Files/balance_history.csv",
+                os.path.join(os.path.dirname(__file__), "..", "Data Files", "balance_history.csv")
+            ]
+            
+            # Get current MT5 account to detect account switches
+            current_account = None
+            try:
+                if mt5.initialize():
+                    account_info = mt5.account_info()
+                    if account_info:
+                        current_account = account_info.login
+                    mt5.shutdown()
+            except:
+                pass
+            
+            # Check if account has changed since last time
+            if 'last_mt5_account' not in st.session_state:
+                st.session_state.last_mt5_account = current_account
+            
+            if current_account and current_account != st.session_state.last_mt5_account:
+                # Account has changed, refresh analytics data
+                for file_path in balance_history_files:
+                    if os.path.exists(file_path):
+                        try:
+                            os.remove(file_path)
+                            st.info(f"🔄 Account switched to #{current_account}, refreshing analytics...")
+                        except:
+                            pass
+                st.session_state.last_mt5_account = current_account
+            else:
+                # Check for hardcoded data and remove it
+                for file_path in balance_history_files:
+                    if os.path.exists(file_path):
+                        try:
+                            df = pd.read_csv(file_path)
+                            if not df.empty and df['balance'].iloc[0] == 10000:
+                                os.remove(file_path)
+                                st.info("🔄 Refreshing analytics with real account data...")
+                        except:
+                            pass
+            
+            # Add a manual refresh button for analytics
+            col1, col2 = st.columns([1, 4])
+            with col1:
+                if st.button("🔄 Force Refresh Analytics", key="force_refresh_analytics"):
+                    # Clear the balance history to force regeneration
+                    balance_files_to_clear = [
+                        "Data Files/balance_history.csv",
+                        os.path.join(os.path.dirname(__file__), "..", "Data Files", "balance_history.csv")
+                    ]
+                    for file_path in balance_files_to_clear:
+                        try:
+                            if os.path.exists(file_path):
+                                os.remove(file_path)
+                                st.success(f"🗑️ Cleared {os.path.basename(file_path)}")
+                        except:
+                            pass
+                    st.cache_data.clear()
+                    st.rerun()
+            
             dashboard = AnalyticsDashboard()
             dashboard.render_dashboard()
         except ImportError as e:

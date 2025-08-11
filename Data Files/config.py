@@ -26,23 +26,24 @@ FTMO_PARAMS = {
 }
 
 CONFIG = {
-    "disable_telegram": False,  # Set to False to enable
+    "disable_telegram": True,  # Disabled for now
 
 
     # ✅ Trade Requirements
-    "min_score_for_trade": 6,
+    "min_score_for_trade": 5.5,  # Optimized for live trading
     "sl_pips": 50,
     "tp_pips": 100,
     "delay_seconds": 60 * 15,  # 15-minute loop
 
     # ✅ Symbol-Specific Lot Sizes
-    "lot_size": 1.25,
+    "lot_size": 0.01,  # Production lot size
     "LOT_SIZES": {
         "XAUUSD": 0.01,
         "US500.cash": 3.5,
-        "EURUSD": 0.01,
+        "EURUSD": 0.01,  # Production lot size
         "GBPUSD": 0.01,
         "GER40.cash": 1.5,
+        "NVDA": 25.0,
     },
 
     # ✅ Structure Toggles
@@ -59,8 +60,8 @@ CONFIG = {
     },
 
     # ✅ Partial + Full Close Settings (Profit Guard)
-    "partial_close_trigger_percent": 1.0,
-    "full_close_trigger_percent": 2.0,
+    "partial_close_trigger_percent": 0.75,  # Faster profit taking
+    "full_close_trigger_percent": 1.5,      # Faster profit taking
 
     # ✅ Session Hours
     "session_hours": {
@@ -84,10 +85,10 @@ CONFIG = {
 
     # ✅ USD Control (Trading Window + Filter)
     "usd_related_keywords": ["USD", "US500", "US30", "NAS100"],
-    "restrict_usd_to_am": True,
+    "restrict_usd_to_am": False,
     "allowed_trading_window": {
-        "start_hour": 14,
-        "end_hour": 16,
+        "start_hour": 13,  # London session
+        "end_hour": 17,    # NY session
     },
 
     # ✅ RSI Settings
@@ -102,23 +103,29 @@ CONFIG = {
     "fib_zone": (0.5, 0.618),
 
     # ✅ News Protection Settings (Red Folder Filter)
-    "enable_news_protection": True,  # Set to False to disable news protection temporarily
+    "enable_news_protection": False,  # Set to False to disable news protection temporarily
     "news_protection_minutes": 30,   # minutes before/after red folder events (±30 min = 1 hour total)
     "news_refresh_interval_hours": 24,  # how often to refresh news data
 
     # ✅ Post-Session Trading Settings
     "post_session_enabled": True,
-    "post_session_score_threshold": 8.0,
-    "post_session_min_ai_confidence": 70,
-    "post_session_lot_multiplier": 0.75,  # 0.75x base lot for all post-session trades
+    "post_session_score_threshold": 7.0,  # Optimized for live trading
+    "post_session_min_ai_confidence": 8,  # Increased for post-session safety
+    "post_session_lot_multiplier": 0.75,  # Reduced for post-session safety
     "post_session_trailing_stop_after_profit_minutes": 30,
-    "post_session_soft_extension_cutoff_utc": "19:30",
+    "post_session_soft_extension_cutoff_utc": "20:00",  # Extended cutoff
     "post_session_enable_reentry": True,
     "post_session_max_reentries_per_symbol": 1,
-    "post_session_partial_close_percent": 0.75,
-    "post_session_full_close_percent": 1.5,
-    "post_session_extension_min_pnl": 1.0,
-    "post_session_max_extension_minutes": 30,
+    "post_session_partial_close_percent": 0.5,  # Faster profit taking
+    "post_session_full_close_percent": 1.0,  # Faster profit taking
+    "post_session_extension_min_pnl": 0.5,  # Lower threshold for extension
+    "post_session_max_extension_minutes": 45,  # More time for profit development
+    
+    # ✅ Additional Safety Measures
+    "enable_dynamic_rrr": True,  # Enable dynamic RRR validation
+    "enable_dynamic_ai_confidence": True,  # Enable dynamic AI confidence requirements
+    "max_consecutive_losses": 3,  # Maximum consecutive losses before cooldown
+    "cooldown_after_losses_minutes": 60,  # Cooldown period after max losses
 }
 
 # Add any other configuration options you need here

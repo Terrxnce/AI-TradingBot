@@ -1,0 +1,28 @@
+{
+    "accounts": {
+        "demo": {
+            "type": "demo",
+            "balance": 10000,
+            "currency": "USD",
+            "leverage": 100,
+            "active": true,
+            "created_at": "2025-08-09T17:40:44.189727"
+        },
+        "live": {
+            "type": "live",
+            "balance": 0,
+            "currency": "USD",
+            "leverage": 100,
+            "active": false,
+            "created_at": "2025-08-09T17:40:44.189768"
+        }
+    },
+    "current_account": "demo",
+    "settings": {
+        "auto_backup": true,
+        "backup_interval": "daily",
+        "max_backup_files": 30
+    },
+    "created_at": "2025-08-09T17:40:44.189770",
+    "version": "1.0.0"
+}

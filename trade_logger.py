@@ -1,12 +1,17 @@
 import pandas as pd
 import os
 from datetime import datetime
+from shared.settings import get_current_user_paths
 
 def log_trade(symbol, direction, lot, sl, tp, entry_price, result):
     """
     Append a single trade to a CSV log file.
     """
-    log_path = "logs/trade_log.csv"
+    user_paths = get_current_user_paths()
+    if user_paths:
+        log_path = os.fspath(user_paths["logs"] / "trade_log.csv")
+    else:
+        log_path = "logs/trade_log.csv"
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
     trade_data = {

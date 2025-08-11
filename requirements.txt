@@ -24,7 +24,7 @@ multidict==6.4.4
 newsapi-python==0.2.7
 numpy==2.2.6
 openai==1.82.1
-packaging==25.0
+packaging==24.2
 pandas==2.2.3
 plotly==5.22.0
 streamlit==1.37.0

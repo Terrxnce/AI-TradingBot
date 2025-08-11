@@ -99,7 +99,12 @@ class PerformanceMetrics:
         """Load trade data from logs and MT5 history"""
         try:
             # First try to load from CSV trade log
-            possible_paths = [
+            from shared.settings import get_current_user_paths
+            user_paths = get_current_user_paths()
+            possible_paths = []
+            if user_paths:
+                possible_paths.append(os.fspath(user_paths["logs"] / "trade_log.csv"))
+            possible_paths += [
                 "logs/trade_log.csv",
                 "Bot Core/logs/trade_log.csv", 
                 "Data Files/trade_log.csv"
@@ -168,8 +173,8 @@ class PerformanceMetrics:
             if not mt5.initialize():
                 return pd.DataFrame()
             
-            # Get all deals from July 21st onwards
-            utc_from = datetime(2025, 7, 21)
+            # Get deals for a reasonable historical window
+            utc_from = datetime.now() - timedelta(days=90)
             utc_to = datetime.now()
             deals = mt5.history_deals_get(utc_from, utc_to)
             mt5.shutdown()
@@ -177,30 +182,14 @@ class PerformanceMetrics:
             if not deals:
                 return pd.DataFrame()
 
-            # Convert to DataFrame
+            # Convert to DataFrame and normalize columns
             deals_df = pd.DataFrame(list(deals), columns=deals[0]._asdict().keys())
-            
-            # Filter for USDJPY deals only
-            usdjpy_deals = deals_df[deals_df['symbol'] == 'USDJPY'].copy()
-            print(f"✅ Found {len(usdjpy_deals)} USDJPY deals in MT5")
-            
-            if not usdjpy_deals.empty:
-                usdjpy_deals['timestamp'] = pd.to_datetime(usdjpy_deals['time'], unit='s')
-                usdjpy_deals['direction'] = usdjpy_deals['type'].apply(lambda x: "BUY" if x == 0 else "SELL")
-                usdjpy_deals = usdjpy_deals.sort_values('timestamp', ascending=False)
-                
-                # Show the latest trades with profit
-                profitable_trades = usdjpy_deals[usdjpy_deals['profit'] != 0]
-                print(f"✅ Found {len(profitable_trades)} USDJPY trades with profit")
-                
-                if not profitable_trades.empty:
-                    print("🎯 Latest profitable trades:")
-                    for idx, trade in profitable_trades.head(5).iterrows():
-                        print(f"  {trade['timestamp']} | {trade['direction']} | Profit: ${trade['profit']:.2f}")
-                
-                return usdjpy_deals
-            
-            return pd.DataFrame()
+            if deals_df.empty:
+                return pd.DataFrame()
+            deals_df['timestamp'] = pd.to_datetime(deals_df['time'], unit='s')
+            deals_df['direction'] = deals_df['type'].apply(lambda x: "BUY" if x == 0 else "SELL")
+            deals_df = deals_df.sort_values('timestamp', ascending=False)
+            return deals_df
             
         except Exception as e:
             print(f"❌ Error getting MT5 trade history: {e}")
@@ -459,9 +448,20 @@ class PerformanceMetrics:
 """
         return summary
 
-    def get_mt5_account_balance(self):
-        """Get current account balance directly from MT5"""
+    def get_mt5_account_balance(self, account_id: str = None):
+        """Get current account balance directly from MT5 for specific account"""
         try:
+            # Try to use account-aware system if available
+            try:
+                from account_manager import get_data_source
+                data_source = get_data_source()
+                account_info = data_source.get_mt5_account_info(account_id)
+                if account_info:
+                    return account_info.get('balance')
+            except ImportError:
+                pass
+            
+            # Fallback to direct MT5 access
             import MetaTrader5 as mt5
             if not mt5.initialize():
                 return None
@@ -478,9 +478,20 @@ class PerformanceMetrics:
             print(f"❌ Error getting MT5 account balance: {e}")
             return None
     
-    def get_mt5_account_equity(self):
-        """Get current account equity directly from MT5"""
+    def get_mt5_account_equity(self, account_id: str = None):
+        """Get current account equity directly from MT5 for specific account"""
         try:
+            # Try to use account-aware system if available
+            try:
+                from account_manager import get_data_source
+                data_source = get_data_source()
+                account_info = data_source.get_mt5_account_info(account_id)
+                if account_info:
+                    return account_info.get('equity')
+            except ImportError:
+                pass
+            
+            # Fallback to direct MT5 access
             import MetaTrader5 as mt5
             if not mt5.initialize():
                 return None
