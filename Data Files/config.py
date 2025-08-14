@@ -30,13 +30,13 @@ CONFIG = {
 
 
     # ✅ Trade Requirements
-    "min_score_for_trade": 5.5,  # Optimized for live trading
-    "sl_pips": 50,
-    "tp_pips": 100,
+    "min_score_for_trade": 6.0,  # Optimized for live trading
+    "sl_pips": 80,
+    "tp_pips": 160,
     "delay_seconds": 60 * 15,  # 15-minute loop
 
     # ✅ Symbol-Specific Lot Sizes
-    "lot_size": 0.01,  # Production lot size
+    "lot_size": 1.25,  # Production lot size
     "LOT_SIZES": {
         "XAUUSD": 0.01,
         "US500.cash": 3.5,
@@ -71,6 +71,11 @@ CONFIG = {
         "New York": (14, 20),
         "Post-Market": (20, 24)
     },
+    
+    # ✅ Session Trading Restrictions
+    "restrict_off_hours_trading": True,  # Block trades during off-hours
+    "min_score_off_hours": 7.0,  # Higher score required during off-hours
+    "max_lot_size_off_hours": 0.5,  # Smaller lot sizes during off-hours
 
     # ✅ Cooldown Settings
     "drawdown_limit_percent": -1.0,
@@ -87,8 +92,8 @@ CONFIG = {
     "usd_related_keywords": ["USD", "US500", "US30", "NAS100"],
     "restrict_usd_to_am": False,
     "allowed_trading_window": {
-        "start_hour": 13,  # London session
-        "end_hour": 17,    # NY session
+        "start_hour": 0,  # London session
+        "end_hour": 24,    # NY session
     },
 
     # ✅ RSI Settings

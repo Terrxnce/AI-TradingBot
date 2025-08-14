@@ -297,22 +297,22 @@ def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=
             sl = sl_structure_price + buffer
             sl_from = f"{sl_structure_type} + ATR buffer"
     else:
-        # Fallback to ATR-based SL
+        # Fallback to ATR-based SL (increased multiplier for wider stops)
         if direction == "BUY":
-            sl = entry_price - (atr * 0.5)
+            sl = entry_price - (atr * 1.5)  # Increased from 0.5 to 1.5
             sl_from = "ATR fallback"
         else:  # SELL
-            sl = entry_price + (atr * 0.5)
+            sl = entry_price + (atr * 1.5)  # Increased from 0.5 to 1.5
             sl_from = "ATR fallback"
     
     # Validate SL position
     if direction == "BUY" and sl >= entry_price:
         print(f"⚠️ Invalid SL for BUY: {sl} >= {entry_price}, using ATR fallback")
-        sl = entry_price - (atr * 0.5)
+        sl = entry_price - (atr * 1.5)  # Increased from 0.5 to 1.5
         sl_from = "ATR fallback (invalid structure)"
     elif direction == "SELL" and sl >= entry_price:  # Fixed: SELL SL should be BELOW entry
         print(f"⚠️ Invalid SL for SELL: {sl} >= {entry_price}, using ATR fallback")
-        sl = entry_price + (atr * 0.5)
+        sl = entry_price + (atr * 1.5)  # Increased from 0.5 to 1.5
         sl_from = "ATR fallback (invalid structure)"
     
     # Find TP structure (ahead of entry)
@@ -342,6 +342,20 @@ def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=
     sl_distance = abs(entry_price - sl)
     tp_distance = abs(adjusted_tp - entry_price)
     expected_rrr = tp_distance / sl_distance if sl_distance > 0 else 0
+    
+    # Ensure minimum SL distance (at least 15 pips for JPY pairs, 10 for others)
+    min_sl_distance = 0.0015 if "JPY" in symbol else 0.0010  # 15 pips for JPY, 10 for others
+    if sl_distance < min_sl_distance:
+        print(f"⚠️ SL distance {sl_distance:.5f} too small, adjusting to minimum {min_sl_distance:.5f}")
+        if direction == "BUY":
+            sl = entry_price - min_sl_distance
+        else:  # SELL
+            sl = entry_price + min_sl_distance
+        sl_from = f"Minimum distance ({min_sl_distance:.5f})"
+        # Recalculate RRR
+        sl_distance = min_sl_distance
+        tp_distance = abs(adjusted_tp - entry_price)
+        expected_rrr = tp_distance / sl_distance if sl_distance > 0 else 0
     
     return {
         "sl": round(sl, 5),
