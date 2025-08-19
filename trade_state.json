@@ -1,0 +1,38 @@
+{
+  "288533924": {
+    "partial_closed": true,
+    "trailing_sl_applied": true,
+    "reason": "partial",
+    "last_updated": "2025-08-14T12:33:07.128468"
+  },
+  "288540587": {
+    "partial_closed": true,
+    "trailing_sl_applied": true,
+    "reason": "partial",
+    "last_updated": "2025-08-14T12:33:07.191783"
+  },
+  "288546519": {
+    "partial_closed": true,
+    "trailing_sl_applied": true,
+    "reason": "partial",
+    "last_updated": "2025-08-14T12:33:07.252286"
+  },
+  "288563724": {
+    "partial_closed": true,
+    "trailing_sl_applied": true,
+    "reason": "partial",
+    "last_updated": "2025-08-14T12:33:07.316587"
+  },
+  "288564559": {
+    "partial_closed": true,
+    "trailing_sl_applied": false,
+    "reason": "partial",
+    "last_updated": "2025-08-14T12:20:45.297088"
+  },
+  "288572071": {
+    "partial_closed": true,
+    "trailing_sl_applied": true,
+    "reason": "partial",
+    "last_updated": "2025-08-14T13:26:32.460001"
+  }
+}

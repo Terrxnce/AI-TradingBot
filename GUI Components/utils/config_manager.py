@@ -161,7 +161,7 @@ class ConfigManager:
         
         # Validate required CONFIG fields
         required_fields = [
-            "min_score_for_trade", "sl_pips", "tp_pips", "lot_size",
+            "sl_pips", "tp_pips", "lot_size",
             "partial_close_trigger_percent", "full_close_trigger_percent"
         ]
         
@@ -171,9 +171,17 @@ class ConfigManager:
             elif not isinstance(config[field], (int, float)):
                 errors.append(f"Field {field} must be numeric")
         
+        # Validate tech_scoring section
+        tech_scoring = config.get("tech_scoring", {})
+        if "min_score_for_trade" not in tech_scoring:
+            errors.append("Missing required field: tech_scoring.min_score_for_trade")
+        elif not isinstance(tech_scoring.get("min_score_for_trade", 0), (int, float)):
+            errors.append("Field tech_scoring.min_score_for_trade must be numeric")
+        
         # Validate specific ranges
-        if config.get("min_score_for_trade", 0) < 0 or config.get("min_score_for_trade", 0) > 10:
-            errors.append("min_score_for_trade must be between 0 and 10")
+        min_score = tech_scoring.get("min_score_for_trade", 0)
+        if min_score < 0 or min_score > 8:
+            errors.append("tech_scoring.min_score_for_trade must be between 0 and 8")
         
         if config.get("lot_size", 0) <= 0:
             errors.append("lot_size must be positive")

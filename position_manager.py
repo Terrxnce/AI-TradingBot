@@ -170,8 +170,8 @@ def check_for_partial_close():
                     # ✅ Mark this trade for trailing SL later
                     mark_partial_closed(ticket)
 
-                    DEFAULT_LOT = CONFIG["lot_size"]
-                    CONFIG["LOT_SIZES"][symbol.upper()] = DEFAULT_LOT
+                    DEFAULT_LOT = CONFIG["default_lot_size"]
+                    CONFIG["lot_sizes"][symbol.upper()] = DEFAULT_LOT
                     print(f"🔁 Lot size for {symbol.upper()} reset to config default: {DEFAULT_LOT}")
 
                 else:

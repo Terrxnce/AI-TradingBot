@@ -1,49 +1,133 @@
-# rsi_fib_confluence.py
+#!/usr/bin/env python3
+"""
+rsi_fib_confluence.py - RSI and Fibonacci Confluence Detection
+Detects confluence between RSI levels and Fibonacci retracements
+"""
+
 import pandas as pd
 import numpy as np
 
-def fib_confluence(candles: pd.DataFrame, impulse_type: str, zone=(0.5, 0.618), window=30):
+def calculate_rsi(df, period=14):
     """
-    Checks if current price is in Fib retracement zone after an impulse.
-    Returns (bool, str) → True/False, and a context description string.
+    Calculate RSI indicator
+    
+    Args:
+        df: DataFrame with OHLC data
+        period: RSI period (default 14)
+    
+    Returns:
+        Series: RSI values
     """
-    if candles is None or len(candles) < window:
-        return False, ""
-
-    recent = candles.iloc[-window:]
-    swing_high = recent["high"].max()
-    swing_low = recent["low"].min()
-
-    last_price = candles.iloc[-1]["close"]
-    retrace_zone = (swing_low + (swing_high - swing_low) * zone[0],
-                    swing_low + (swing_high - swing_low) * zone[1])
-
-    in_zone = retrace_zone[0] <= last_price <= retrace_zone[1]
-
-    if in_zone:
-        return True, f"Price has retraced to Fib zone {zone[0]*100:.0f}–{zone[1]*100:.0f}%."
-    return False, ""
-
-def rsi_support(candles: pd.DataFrame, period=14, lower=35, upper=65):
-    """
-    Returns True if RSI is in neutral-to-supportive zone (not overbought/oversold),
-    and a context description.
-    """
-    if len(candles) < period:
-        return False, ""
-
-    delta = candles["close"].diff()
-    gain = np.where(delta > 0, delta, 0)
-    loss = np.where(delta < 0, -delta, 0)
-
-    avg_gain = pd.Series(gain).rolling(window=period).mean().iloc[-1]
-    avg_loss = pd.Series(loss).rolling(window=period).mean().iloc[-1]
-    if avg_loss == 0:
-        return False, ""
-
-    rs = avg_gain / avg_loss
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss
     rsi = 100 - (100 / (1 + rs))
+    return rsi
 
-    if lower < rsi < upper:
-        return True, f"RSI is at {rsi:.1f}, suggesting momentum is cooling but not extreme."
-    return False, ""
+def calculate_fibonacci_levels(high, low):
+    """
+    Calculate Fibonacci retracement levels
+    
+    Args:
+        high: High price
+        low: Low price
+    
+    Returns:
+        dict: Fibonacci levels
+    """
+    diff = high - low
+    return {
+        "0.0": low,
+        "0.236": low + 0.236 * diff,
+        "0.382": low + 0.382 * diff,
+        "0.5": low + 0.5 * diff,
+        "0.618": low + 0.618 * diff,
+        "0.786": low + 0.786 * diff,
+        "1.0": high
+    }
+
+def fib_confluence(df, impulse_data=None, lookback=20):
+    """
+    Detect Fibonacci confluence levels
+    
+    Args:
+        df: DataFrame with OHLC data
+        impulse_data: Impulse data (ignored, for backward compatibility)
+        lookback: Lookback period for swing high/low
+    
+    Returns:
+        tuple: (bool, str) - (confluence_hit, description)
+    """
+    # Handle case where impulse_data is passed incorrectly
+    if isinstance(impulse_data, int):
+        lookback = impulse_data
+    elif isinstance(lookback, dict):
+        lookback = 20  # Default value if parameters are mixed up
+    
+    if len(df) < lookback:
+        return False, "Insufficient data for Fib analysis"
+    
+    # Get swing high and low
+    recent = df.tail(lookback)
+    swing_high = recent['high'].max()
+    swing_low = recent['low'].min()
+    
+    # Calculate Fibonacci levels
+    fib_levels = calculate_fibonacci_levels(swing_high, swing_low)
+    
+    # Get current price
+    current_price = df.iloc[-1]['close']
+    
+    # Find nearest Fibonacci level
+    nearest_level = None
+    min_distance = float('inf')
+    
+    for level_name, level_price in fib_levels.items():
+        distance = abs(current_price - level_price)
+        if distance < min_distance:
+            min_distance = distance
+            nearest_level = {
+                "level": level_name,
+                "price": level_price,
+                "distance": distance
+            }
+    
+    # Check if price is near a key Fibonacci level (within 0.1% tolerance)
+    tolerance = current_price * 0.001  # 0.1% tolerance
+    
+    if nearest_level and nearest_level["distance"] <= tolerance:
+        level_name = nearest_level["level"]
+        level_price = nearest_level["price"]
+        return True, f"Fib {level_name} confluence at {level_price:.2f}"
+    
+    return False, "No Fibonacci confluence detected"
+
+def rsi_support(df, period=14, oversold=30, overbought=70):
+    """
+    Detect RSI support/resistance levels
+    
+    Args:
+        df: DataFrame with OHLC data
+        period: RSI period
+        oversold: Oversold threshold
+        overbought: Overbought threshold
+    
+    Returns:
+        tuple: (bool, str) - (signal_active, description)
+    """
+    if len(df) < period + 1:
+        return False, "Insufficient data for RSI analysis"
+    
+    # Calculate RSI
+    rsi = calculate_rsi(df, period)
+    current_rsi = rsi.iloc[-1]
+    
+    # Determine RSI condition
+    if current_rsi < oversold:
+        return True, f"RSI oversold at {current_rsi:.1f} (bullish signal)"
+    elif current_rsi > overbought:
+        return True, f"RSI overbought at {current_rsi:.1f} (bearish signal)"
+    else:
+        return False, f"RSI neutral at {current_rsi:.1f}"
+

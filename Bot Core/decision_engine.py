@@ -24,13 +24,31 @@
 
 import sys
 import os
+from pathlib import Path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
-from config import CONFIG  # Optional config import
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))  # Add parent directory for rrr_validation_repair
+from config import CONFIG, USE_8PT_SCORING  # Import new scoring flag
 from ta.volatility import average_true_range
 import pandas as pd
 import re
 import json
 from datetime import datetime
+
+# Import RRR validation system
+try:
+    from rrr_validation_repair import validate_and_repair_rrr
+except ImportError:
+    print("⚠️ Could not import RRR validation system - RRR validation will be disabled")
+    validate_and_repair_rrr = None
+
+# Import new 0-8 scoring system
+try:
+    from scoring.score_technical_v1_8pt import score_technical_v1_8pt, TechContext, TechScoreResult
+except ImportError:
+    print("⚠️ Could not import 0-8 scoring system - falling back to legacy scoring")
+    score_technical_v1_8pt = None
+    TechContext = None
+    TechScoreResult = None
 
 def build_ai_prompt(ta_signals: dict, macro_sentiment: str = "", session_info: str = ""):
     impulse_line = ""
@@ -128,17 +146,204 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
     Technicals decide direction. AI must confirm unless technical score is very strong.
     AI response must be in structured format: ENTRY_DECISION, CONFIDENCE, etc.
     """
+    
+    # === NEW: 0-8 Technical Scoring System ===
+    if USE_8PT_SCORING and score_technical_v1_8pt is not None:
+        return evaluate_trade_decision_8pt(ta_signals, ai_response_raw)
+    
+    # === LEGACY: Fallback to old scoring system ===
+    return evaluate_trade_decision_legacy(ta_signals, ai_response_raw)
+
+
+def evaluate_trade_decision_8pt(ta_signals, ai_response_raw):
+    """
+    NEW: 0-8 Technical Scoring System implementation
+    """
+    print("📊 Using 0-8 Technical Scoring System")
+    
+    # Get configuration - use tech_scoring as single source of truth
+    tech_cfg = CONFIG.get("tech_scoring", {})
+    min_score = tech_cfg.get("min_score_for_trade", 6.0)  # Default to 6.0 if not found
+    post_session_threshold = tech_cfg.get("post_session_threshold", 8.0)
+    pm_usd_min_score = tech_cfg.get("pm_usd_asset_min_score", 6.0)
+    require_ema_alignment = tech_cfg.get("require_ema_alignment", True)
+    ai_min_confidence = tech_cfg.get("ai_min_confidence", 7.0)
+    ai_override_enabled = tech_cfg.get("ai_override_enabled", True)
+    
     # Check if we're in post-session mode
     from session_utils import is_post_session
     from post_session_manager import is_post_session_trade_eligible
     
     is_post_session_mode = is_post_session()
     
+    # Determine direction from EMA trend
+    ema_trend = ta_signals.get("ema_trend", "neutral")
+    if ema_trend == "bullish":
+        direction = "BUY"
+    elif ema_trend == "bearish":
+        direction = "SELL"
+    else:
+        print("⚠️ No clear EMA trend direction")
+        return "HOLD"
+    
+    # Helper function to convert direction
+    def convert_direction(dir_str):
+        if dir_str == "bullish":
+            return "BUY"
+        elif dir_str == "bearish":
+            return "SELL"
+        elif dir_str in ["BUY", "SELL"]:
+            return dir_str
+        else:
+            return "NEUTRAL"
+    
+    # Build TechContext for scoring
+    ctx = TechContext(
+        dir=direction,
+        session=ta_signals.get("session", "london").lower(),
+        symbol=ta_signals.get("symbol", ""),
+        
+        # Structure signals
+        bos_confirmed=ta_signals.get("bos_confirmed", False),
+        bos_direction=convert_direction(ta_signals.get("bos_direction", "NEUTRAL")),
+        fvg_valid=ta_signals.get("fvg_valid", False),
+        fvg_filled=ta_signals.get("fvg_filled", False),
+        fvg_direction=convert_direction(ta_signals.get("fvg_direction", "NEUTRAL")),
+        ob_tap=ta_signals.get("ob_tap", False),
+        ob_direction=convert_direction(ta_signals.get("ob_direction", "NEUTRAL")),
+        rejection_at_key_level=ta_signals.get("rejection", False),
+        rejection_confirmed_next=ta_signals.get("rejection_confirmed_next", False),
+        rejection_direction=convert_direction(ta_signals.get("rejection_direction", "NEUTRAL")),
+        sweep_recent=ta_signals.get("liquidity_sweep", False),
+        sweep_reversal_confirmed=ta_signals.get("sweep_reversal_confirmed", False),
+        sweep_direction=convert_direction(ta_signals.get("sweep_direction", "NEUTRAL")),
+        engulfing_present=ta_signals.get("engulfing", False),
+        engulfing_direction=convert_direction(ta_signals.get("engulfing_direction", "NEUTRAL")),
+        
+        # Trend context
+        ema21=ta_signals.get("ema21", 0.0),
+        ema50=ta_signals.get("ema50", 0.0),
+        ema200=ta_signals.get("ema200", 0.0),
+        price=ta_signals.get("price", 0.0),
+        
+        # HTF confirms
+        ema_aligned_m15=ta_signals.get("ema_aligned_m15", False),
+        ema_aligned_h1=ta_signals.get("ema_aligned_h1", False)
+    )
+    
+    # Calculate technical score
+    score_result = score_technical_v1_8pt(ctx)
+    
+    print(f"📊 Technical Score: {score_result.score_8pt:.1f} / 8.0")
+    print(f"📊 Components: {score_result.components}")
+    print(f"📊 EMA Alignment: {score_result.ema_alignment_ok}")
+    print(f"📊 Technical Direction: {score_result.technical_direction}")
+    
+    # Determine minimum required score based on session
+    session = ta_signals.get("session", "london")
     if is_post_session_mode:
-        required_score = CONFIG.get("post_session_score_threshold", 8.0)
+        min_required = post_session_threshold
+        print(f"🕐 Post-Session Mode: Required score = {min_required}")
+    elif session == "pm" and any(keyword in ta_signals.get("symbol", "").upper() for keyword in CONFIG.get("usd_related_keywords", [])):
+        min_required = pm_usd_min_score
+        print(f"🕔 PM USD Asset: Required score = {min_required}")
+    else:
+        min_required = min_score
+        print(f"📊 Standard Session: Required score = {min_required}")
+    
+    # Check EMA alignment requirement
+    if require_ema_alignment and not score_result.ema_alignment_ok:
+        print("⚠️ EMA alignment requirement not met")
+        return "HOLD"
+    
+    # Post-session specific eligibility check
+    if is_post_session_mode:
+        symbol = ta_signals.get("symbol", "")
+        ai_confidence = 0
+        
+        # Parse AI response to get confidence
+        parsed = parse_ai_response(ai_response_raw)
+        if parsed:
+            try:
+                ai_confidence = float(parsed.get('confidence', 0))
+            except:
+                ai_confidence = 0
+        
+        eligible, reason = is_post_session_trade_eligible(symbol, score_result.score_8pt, ai_confidence)
+        if not eligible:
+            print(f"🕐 Post-Session: {reason}")
+            return "HOLD"
+    
+    # Parse AI response
+    parsed = parse_ai_response(ai_response_raw)
+    ai_confidence = parsed.get("confidence", 0) if parsed else 0
+    ai_direction = parsed.get("decision", "HOLD") if parsed else "HOLD"
+    
+    # Determine final decision
+    final_decision = "HOLD"
+    override_used = False
+    
+    if score_result.score_8pt >= min_required and ai_override_enabled:
+        # Technical score is high enough - override AI
+        final_decision = score_result.technical_direction
+        override_used = True
+        print(f"⚡ Technical score {score_result.score_8pt} overrode AI - using {final_decision}")
+    else:
+        # Require AI confirmation
+        if (ai_confidence >= ai_min_confidence and 
+            ai_direction == score_result.technical_direction and 
+            score_result.score_8pt >= min_required):
+            final_decision = ai_direction
+            print(f"🤝 AI confirmed technical direction: {final_decision}")
+        else:
+            print(f"⚠️ AI confidence {ai_confidence} below required {ai_min_confidence} or direction mismatch")
+            final_decision = "HOLD"
+    
+    # Log detailed scoring information
+    log_entry = {
+        "tech_score_8pt": score_result.score_8pt,
+        "tech_components": score_result.components,
+        "ema_alignment": score_result.ema_alignment_ok,
+        "session": session,
+        "symbol": ta_signals.get("symbol", ""),
+        "min_required_score": min_required,
+        "technical_direction": score_result.technical_direction,
+        "ai_dir": ai_direction,
+        "ai_conf": ai_confidence,
+        "override_used": override_used,
+        "final_decision": final_decision
+    }
+    
+    # Log to AI decision log
+    try:
+        with open("Bot Core/ai_decision_log.jsonl", "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as e:
+        print(f"⚠️ Failed to log scoring data: {e}")
+    
+    return final_decision
+
+
+def evaluate_trade_decision_legacy(ta_signals, ai_response_raw):
+    """
+    LEGACY: Fallback to old scoring system
+    """
+    print("📊 Using Legacy Technical Scoring System")
+    
+    # Check if we're in post-session mode
+    from session_utils import is_post_session
+    from post_session_manager import is_post_session_trade_eligible
+    
+    is_post_session_mode = is_post_session()
+    
+    # Use tech_scoring as single source of truth for all scoring
+    tech_cfg = CONFIG.get("tech_scoring", {})
+    
+    if is_post_session_mode:
+        required_score = tech_cfg.get("post_session_threshold", 8.0)
         print(f"🕐 Post-Session Mode: Required score = {required_score}")
     else:
-        required_score = CONFIG.get("min_score_for_trade", 6.0)
+        required_score = tech_cfg.get("min_score_for_trade", 6.0)
     
     technical_score = 0.0
 
@@ -171,6 +376,70 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
     #check if technical score meets minimum requirement
     if technical_score < required_score:
         print(f"⚠️ Technical score {technical_score}/8 is below required {required_score}, Skipping trade.")
+        return "HOLD"
+    
+    # Post-session specific eligibility check
+    if is_post_session_mode:
+        symbol = ta_signals.get("symbol", "")
+        ai_confidence = 0
+        
+        # Parse AI response to get confidence
+        parsed = parse_ai_response(ai_response_raw)
+        if parsed:
+            try:
+                ai_confidence = float(parsed.get('confidence', 0))
+            except:
+                ai_confidence = 0
+        
+        eligible, reason = is_post_session_trade_eligible(symbol, technical_score, ai_confidence)
+        if not eligible:
+            print(f"🕐 Post-Session: {reason}")
+            return "HOLD"
+
+    # === PM Session USD/US Asset Filter ===
+    from datetime import datetime
+    now = datetime.now()
+    current_hour = now.hour
+    pm_start = CONFIG.get("pm_session_start", 17)
+    pm_end = CONFIG.get("pm_session_end", 21)
+    usd_keywords = CONFIG.get("usd_related_keywords", [])
+    min_pm_score = CONFIG.get("pm_usd_asset_min_score", 6)
+
+    symbol = ta_signals.get("symbol", "").upper()
+
+   #if pm_start <= current_hour < pm_end:
+   #    if any(keyword in symbol for keyword in usd_keywords):
+   #        if technical_score < min_pm_score:
+   #            print(f"🕔 PM Session: {symbol} blocked – score {technical_score}/8 below minimum {min_pm_score}")
+   #            return "HOLD"
+
+    # === Override AI if technicals are very strong
+    if technical_score >= required_score and direction:
+        print(f"⚡ Strong technicals (score: {technical_score}) override AI.")
+        return direction
+    
+    # === Parse structured AI response with dynamic confidence requirements
+    parsed = parse_ai_response(ai_response_raw)
+    if parsed:
+        print(f"🧠 AI Decision: {parsed['decision']} | Confidence: {parsed['confidence']} | Reason: {parsed['reasoning']}")
+        
+        # Dynamic AI confidence requirements based on technical score
+        if technical_score >= 7.0:
+            required_ai_confidence = 6  # Lower for strong technicals
+        elif technical_score >= 6.0:
+            required_ai_confidence = 7  # Standard requirement
+        else:
+            required_ai_confidence = 8  # Higher for weak technicals
+        
+        print(f"📊 Required AI confidence: {required_ai_confidence} (based on technical score {technical_score})")
+        
+        if parsed['decision'] == direction and parsed['confidence'] >= required_ai_confidence:
+            return parsed['decision']
+        else:
+            print(f"⚠️ AI confidence {parsed['confidence']} below required {required_ai_confidence} or direction mismatch")
+            return "HOLD"
+    else:
+        print("❌ Could not parse AI. Defaulting to HOLD.")
         return "HOLD"
     
     # Post-session specific eligibility check
@@ -332,7 +601,7 @@ def calculate_dynamic_sl_tp(price, direction, candles_df, rrr=2.0, window=14, bu
 
     return round(sl, 5), round(tp, 5)
 
-def calculate_structural_sl_tp_with_validation(candles_df, entry_price, direction, session_time=None, technical_score=0):
+def calculate_structural_sl_tp_with_validation(candles_df, entry_price, direction, session_time=None, technical_score=0, symbol=None):
     """
     Calculate structure-aware SL/TP with RRR validation and logging.
     
@@ -342,35 +611,65 @@ def calculate_structural_sl_tp_with_validation(candles_df, entry_price, directio
     import json
     
     try:
-        # Import the new structural SL/TP module
+                # Use structural SL/TP system with RRR validation
         from calculate_structural_sl_tp import calculate_structural_sl_tp
         
         # Calculate structural SL/TP
-        result = calculate_structural_sl_tp(candles_df, entry_price, direction, session_time)
+        result = calculate_structural_sl_tp(candles_df, entry_price, direction, session_time, symbol)
         
-        # Dynamic RRR validation based on technical score
+        # Structural validation (no hardcoded RRR filters)
+        sl = result["sl"]
+        tp = result["tp"]
         expected_rrr = result["expected_rrr"]
         
-        if technical_score >= 7.0:
-            rrr_passed = expected_rrr >= 1.0  # Lower threshold for strong setups
-            result["rrr_reason"] = f"Strong technical score ({technical_score}) allows lower RRR threshold 1.0"
-        elif technical_score >= 6.0:
-            rrr_passed = expected_rrr >= 1.2  # Standard threshold
-            result["rrr_reason"] = f"Standard RRR threshold 1.2 for technical score {technical_score}"
+        # Check for invalid SL/TP conditions
+        if sl == tp:
+            rrr_passed = False
+            result["rrr_reason"] = "SL equals TP - invalid structure"
+        elif expected_rrr <= 0:
+            rrr_passed = False
+            result["rrr_reason"] = "Invalid RRR calculation"
+        elif result["atr"] <= 0 and result.get("system") != "symbol_specific_v2":
+            rrr_passed = False
+            result["rrr_reason"] = "Invalid ATR value"
         else:
-            rrr_passed = expected_rrr >= 1.5  # Higher threshold for weak setups
-            result["rrr_reason"] = f"Weak technical score ({technical_score}) requires higher RRR threshold 1.5"
-        
-        # Additional validation for borderline cases
-        if not rrr_passed:
-            if technical_score >= 7.0 and expected_rrr < 1.0:
-                result["rrr_reason"] = f"RRR {expected_rrr} below minimum threshold 1.0 for strong technicals"
-            elif technical_score >= 6.0 and expected_rrr < 1.2:
-                result["rrr_reason"] = f"RRR {expected_rrr} below minimum threshold 1.2 for standard technicals"
-            elif technical_score < 6.0 and expected_rrr < 1.5:
-                result["rrr_reason"] = f"RRR {expected_rrr} below minimum threshold 1.5 for weak technicals"
+            # Structure-aware validation passed
+            rrr_passed = True
+            result["rrr_reason"] = f"Structural validation passed - RRR: {expected_rrr:.3f}"
         
         result["rrr_passed"] = rrr_passed
+        
+        # 🛡️ NEW: RRR Validation & Repair for legacy system
+        if rrr_passed and validate_and_repair_rrr is not None:
+            # Validate and repair RRR
+            rrr_result = validate_and_repair_rrr(
+                entry_price=entry_price,
+                sl_price=result["sl"],
+                tp_price=result["tp"],
+                direction=direction,
+                atr_value=result["atr"],
+                symbol=symbol,
+                structural_targets=None,  # Legacy system doesn't provide these
+                structural_stops=None
+            )
+            
+            if rrr_result is None:
+                # RRR validation failed
+                result["rrr_passed"] = False
+                result["rrr_reason"] = "RRR validation failed - trade canceled"
+                result["expected_rrr"] = 0.0
+            else:
+                # RRR validation passed - use repaired values
+                final_sl, final_tp, final_rrr = rrr_result
+                result["sl"] = final_sl
+                result["tp"] = final_tp
+                result["expected_rrr"] = final_rrr
+                result["rrr_reason"] = f"RRR validation passed - {final_rrr:.3f}"
+        elif rrr_passed and validate_and_repair_rrr is None:
+            # RRR validation system not available - skip validation
+            result["rrr_reason"] = f"RRR validation skipped - system not available, RRR: {expected_rrr:.3f}"
+        
+        mapped_result = result
         
         # Log the calculation details
         log_entry = {
@@ -383,10 +682,14 @@ def calculate_structural_sl_tp_with_validation(candles_df, entry_price, directio
             "sl_from": result["sl_from"],
             "tp_from": result["tp_from"],
             "session_adjustment": result["session_adjustment"],
-            "rrr_passed": str(rrr_passed),  # Convert boolean to string
+            "rrr_passed": str(rrr_passed),
             "rrr_reason": result["rrr_reason"],
             "structures_found": result["structures_found"],
-            "atr": result["atr"]
+            "atr": result["atr"],
+            "atr_multiplier": result.get("atr_multiplier", "N/A"),
+            "htf_validation_score": result.get("htf_validation_score", "N/A"),
+            "tp_split_enabled": result.get("tp_split", {}).get("enabled", False),
+            "system": "legacy_structural"
         }
         
         # Append to AI decision log
@@ -397,28 +700,55 @@ def calculate_structural_sl_tp_with_validation(candles_df, entry_price, directio
             if user_paths:
                 log_path = user_paths["logs"] / "ai_decision_log.jsonl"
             else:
-                log_path = "Bot Core/ai_decision_log.jsonl"
+                # Fallback to local logs directory
+                log_path = Path("logs") / "ai_decision_log.jsonl"
+                log_path.parent.mkdir(exist_ok=True)
             
-            with open(log_path, "a") as f:
+            with open(log_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry) + "\n")
         except Exception as e:
             print(f"⚠️ Failed to log SL/TP calculation: {e}")
         
-        return result
+        return mapped_result
         
     except Exception as e:
         print(f"❌ Error in structural SL/TP calculation: {e}")
-        # Fallback to old dynamic calculation
-        sl, tp = calculate_dynamic_sl_tp(candles_df, entry_price, direction)
+        
+        # Emergency fallback using config values instead of ATR
+        config_sl_pips = CONFIG.get("sl_pips", 50)
+        config_tp_pips = CONFIG.get("tp_pips", 100)
+        
+        # Convert pips to price distance
+        if symbol and "JPY" in symbol.upper():
+            pip_size = 0.01  # JPY pairs
+        else:
+            pip_size = 0.0001  # Major pairs
+        
+        config_sl_distance = config_sl_pips * pip_size
+        config_tp_distance = config_tp_pips * pip_size
+        
+        if direction == "BUY":
+            sl = entry_price - config_sl_distance
+            tp = entry_price + config_tp_distance
+        else:  # SELL
+            sl = entry_price + config_sl_distance
+            tp = entry_price - config_tp_distance
+        
+        expected_rrr = config_tp_pips / config_sl_pips
+        
         return {
-            "sl": sl,
-            "tp": tp,
-            "expected_rrr": 2.0,  # Assumed 2:1 RRR
+            "sl": round(sl, 5),
+            "tp": round(tp, 5),
+            "expected_rrr": round(expected_rrr, 3),
             "rrr_passed": True,
-            "rrr_reason": "Fallback to dynamic SL/TP",
-            "sl_from": "Dynamic fallback",
-            "tp_from": "Dynamic fallback",
+            "rrr_reason": f"Emergency config fallback - RRR: {expected_rrr:.3f}",
+            "sl_from": f"Emergency config fallback ({config_sl_pips} pips)",
+            "tp_from": f"Emergency config fallback ({config_tp_pips} pips)",
             "session_adjustment": "None",
             "atr": 0.0001,
-            "structures_found": {"ob_count": 0, "fvg_count": 0, "bos_count": 0}
+            "structures_found": {"ob_count": 0, "fvg_count": 0, "bos_count": 0},
+            "atr_multiplier": "N/A",
+            "htf_validation_score": "N/A",
+            "tp_split_enabled": False,
+            "system": "emergency_fallback"
         }

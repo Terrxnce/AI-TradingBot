@@ -21,3 +21,214 @@
 2025-08-11 20:15:03,240 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
 2025-08-11 20:15:03,240 - INFO - 🔄 Attempting MT5 reconnection...
 2025-08-11 20:15:05,436 - INFO - ✅ MT5 initialized successfully
+2025-08-14 07:35:54,733 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-14 07:35:54,733 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-14 07:35:54,734 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-14 07:35:56,745 - INFO - ✅ MT5 initialized successfully
+2025-08-14 07:35:56,746 - ERROR - ❌ Trade parameter validation failed: '<=' not supported between instances of 'str' and 'int' | Context: validate_trade_parameters
+2025-08-14 09:59:37,095 - ERROR - ❌ Unhandled error: cannot access local variable 'lot' where it is not associated with a value | Context: run_bot
+2025-08-14 12:15:03,698 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-14 12:15:03,699 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-14 12:15:03,700 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-14 12:15:03,748 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-14 12:15:03,749 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-14 12:15:03,749 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-14 12:15:05,724 - INFO - ✅ MT5 initialized successfully
+2025-08-14 12:15:05,758 - INFO - ✅ MT5 initialized successfully
+2025-08-14 16:15:03,905 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-14 16:15:03,905 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-14 16:15:03,905 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-14 16:15:03,916 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-14 16:15:03,917 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-14 16:15:03,917 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-14 16:15:05,919 - INFO - ✅ MT5 initialized successfully
+2025-08-14 16:15:05,929 - INFO - ✅ MT5 initialized successfully
+2025-08-14 20:15:03,114 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-14 20:15:03,114 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-14 20:15:03,114 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-14 20:15:03,910 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-14 20:15:03,912 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-14 20:15:03,913 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-14 20:15:05,126 - INFO - ✅ MT5 initialized successfully
+2025-08-14 20:15:05,924 - INFO - ✅ MT5 initialized successfully
+2025-08-15 00:15:03,682 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-15 00:15:03,683 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-15 00:15:03,683 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-15 00:15:05,705 - INFO - ✅ MT5 initialized successfully
+2025-08-15 04:15:03,276 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-15 04:15:03,281 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-15 04:15:03,283 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-15 04:15:03,629 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-15 04:15:03,630 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-15 04:15:03,631 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-15 04:15:05,296 - INFO - ✅ MT5 initialized successfully
+2025-08-15 04:15:05,642 - INFO - ✅ MT5 initialized successfully
+2025-08-15 08:15:03,505 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-15 08:15:03,506 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-15 08:15:03,506 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-15 08:15:05,517 - INFO - ✅ MT5 initialized successfully
+2025-08-15 12:15:03,406 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-15 12:15:03,407 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-15 12:15:03,408 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-15 12:15:03,809 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-15 12:15:03,810 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-15 12:15:03,811 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-15 12:15:05,433 - INFO - ✅ MT5 initialized successfully
+2025-08-15 12:15:05,827 - INFO - ✅ MT5 initialized successfully
+2025-08-15 16:15:03,528 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-15 16:15:03,529 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-15 16:15:03,529 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-15 16:15:03,531 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-15 16:15:03,532 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-15 16:15:03,532 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-15 16:15:05,548 - INFO - ✅ MT5 initialized successfully
+2025-08-15 16:15:05,552 - INFO - ✅ MT5 initialized successfully
+2025-08-15 20:15:03,193 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-15 20:15:03,194 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-15 20:15:03,195 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-15 20:15:05,225 - INFO - ✅ MT5 initialized successfully
+2025-08-16 00:15:03,802 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-16 00:15:03,803 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-16 00:15:03,804 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-16 00:15:05,831 - INFO - ✅ MT5 initialized successfully
+2025-08-16 04:15:03,932 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-16 04:15:03,932 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-16 04:15:03,933 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-16 04:15:05,942 - INFO - ✅ MT5 initialized successfully
+2025-08-16 08:15:03,923 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-16 08:15:03,923 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-16 08:15:03,924 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-16 08:15:05,931 - INFO - ✅ MT5 initialized successfully
+2025-08-16 12:15:03,974 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-16 12:15:03,975 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-16 12:15:03,975 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-16 12:15:05,988 - INFO - ✅ MT5 initialized successfully
+2025-08-16 19:31:26,406 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-16 19:31:26,411 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['min_score_for_trade', 'lot_size']
+2025-08-16 19:31:26,412 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-16 19:31:26,416 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['min_score_for_trade', 'lot_size']
+2025-08-16 19:31:26,416 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-16 19:34:28,256 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-16 19:34:28,259 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['min_score_for_trade', 'lot_size']
+2025-08-16 19:34:28,260 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-16 19:34:28,263 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['min_score_for_trade', 'lot_size']
+2025-08-16 19:34:28,263 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-16 19:35:23,815 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-16 19:35:23,818 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['min_score_for_trade', 'lot_size']
+2025-08-16 19:35:23,819 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-16 19:35:23,822 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['min_score_for_trade', 'lot_size']
+2025-08-16 19:35:23,822 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-16 19:36:06,470 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 00:08:36,642 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 00:15:18,485 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 00:15:19,509 - ERROR - ❌ Unhandled error: 0 | Context: run_bot
+2025-08-18 00:16:36,251 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 00:17:28,442 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 00:24:37,237 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 00:26:16,407 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 00:35:53,657 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 04:09:47,434 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 04:13:11,049 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 04:14:52,498 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 04:16:08,079 - INFO - ℹ️ Info in trade_execution: Price: 147.458 | SL: 146.975 | TP: 148.475
+2025-08-18 04:16:08,080 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-18 04:16:08,244 - INFO - ✅ Success in trade_execution: Trade executed: BUY USDJPY @ 147.458
+2025-08-18 04:16:08,368 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-18 04:26:10,605 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 04:26:10,607 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['min_score_for_trade']
+2025-08-18 04:26:10,607 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-18 04:26:10,743 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['min_score_for_trade']
+2025-08-18 04:26:10,743 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-18 04:29:05,561 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 04:29:47,031 - INFO - ℹ️ Info in trade_execution: Price: 147.405 | SL: 146.905 | TP: 148.405
+2025-08-18 04:29:47,032 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-18 04:29:47,209 - INFO - ✅ Success in trade_execution: Trade executed: BUY USDJPY @ 147.405
+2025-08-18 04:29:47,352 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-18 04:30:03,804 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['min_score_for_trade']
+2025-08-18 04:30:03,805 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-18 04:32:32,984 - INFO - ℹ️ Info in trade_execution: Price: 147.404 | SL: 146.898 | TP: 148.398
+2025-08-18 04:32:32,986 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-18 04:32:33,153 - INFO - ✅ Success in trade_execution: Trade executed: BUY USDJPY @ 147.404
+2025-08-18 04:32:33,290 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-18 04:32:38,525 - ERROR - ❌ Unhandled error: 'min_score_for_trade' | Context: run_bot
+2025-08-18 04:36:11,046 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 04:37:33,382 - INFO - ℹ️ Info in trade_execution: Price: 147.394 | SL: 146.885 | TP: 148.385
+2025-08-18 04:37:33,383 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-18 04:37:33,553 - INFO - ✅ Success in trade_execution: Trade executed: BUY USDJPY @ 147.394
+2025-08-18 04:37:33,676 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-18 05:16:44,400 - INFO - ℹ️ Info in trade_execution: Price: 147.486 | SL: 146.972 | TP: 148.472
+2025-08-18 05:16:44,400 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-18 05:16:44,578 - INFO - ✅ Success in trade_execution: Trade executed: BUY USDJPY @ 147.486
+2025-08-18 05:16:44,714 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-18 05:47:04,375 - INFO - ℹ️ Info in trade_execution: Price: 147.452 | SL: 146.920 | TP: 148.420
+2025-08-18 05:47:04,375 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-18 05:47:04,539 - INFO - ✅ Success in trade_execution: Trade executed: BUY USDJPY @ 147.452
+2025-08-18 05:47:04,700 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-18 05:48:34,562 - INFO - ℹ️ Info in trade_execution: Price: 96.153 | SL: 95.653 | TP: 97.153
+2025-08-18 05:48:34,563 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-18 05:48:34,730 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDJPY @ 96.153
+2025-08-18 05:48:34,855 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-18 07:43:47,954 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 07:43:47,957 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['partial_close_trigger_percent', 'full_close_trigger_percent']
+2025-08-18 07:43:47,957 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-18 07:43:48,132 - WARNING - ⚠️ Warning in config_reload: Missing required config fields: ['partial_close_trigger_percent', 'full_close_trigger_percent']
+2025-08-18 07:43:48,133 - WARNING - ⚠️ Warning in config_reload: Using default values where possible
+2025-08-18 07:45:50,060 - INFO - ℹ️ Info in trade_execution: Price: 147.420 | SL: 146.954 | TP: 148.454
+2025-08-18 07:45:50,061 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-18 07:45:50,217 - INFO - ✅ Success in trade_execution: Trade executed: BUY USDJPY @ 147.420
+2025-08-18 07:45:50,353 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-18 07:51:23,008 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 07:52:56,476 - INFO - ℹ️ Info in trade_execution: Price: 147.390 | SL: 146.917 | TP: 148.417
+2025-08-18 07:52:56,477 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-18 07:52:56,641 - INFO - ✅ Success in trade_execution: Trade executed: BUY USDJPY @ 147.390
+2025-08-18 07:52:56,819 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-18 08:00:01,801 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 08:01:26,531 - INFO - ℹ️ Info in trade_execution: Price: 180.47 | SL: 180.47 | TP: 180.27
+2025-08-18 08:01:26,531 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-18 08:01:26,532 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10016 - Invalid stops
+2025-08-18 08:15:03,549 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-18 08:15:03,550 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-18 08:15:03,554 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-18 08:15:05,573 - INFO - ✅ MT5 initialized successfully
+2025-08-18 08:22:54,899 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 08:23:05,682 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 08:23:16,928 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 08:23:52,131 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 08:30:06,799 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 12:15:03,218 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-18 12:15:03,219 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-18 12:15:03,220 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-18 12:15:05,244 - INFO - ✅ MT5 initialized successfully
+2025-08-18 15:15:04,513 - ERROR - ❌ Unhandled error: '<' not supported between instances of 'int' and 'dict' | Context: run_bot
+2025-08-18 17:46:16,259 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 17:51:05,677 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 17:53:43,751 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 18:09:14,073 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 18:13:55,681 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 18:17:05,849 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-18 20:15:03,933 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-18 20:15:03,935 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-18 20:15:03,936 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-18 20:15:05,949 - INFO - ✅ MT5 initialized successfully
+2025-08-19 00:15:03,950 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-19 00:15:03,951 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-19 00:15:03,953 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-19 00:15:05,979 - INFO - ✅ MT5 initialized successfully
+2025-08-19 04:15:03,514 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-19 04:15:03,514 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-19 04:15:03,514 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-19 04:15:05,537 - INFO - ✅ MT5 initialized successfully
+2025-08-19 07:45:07,394 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-19 07:46:08,782 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-19 08:15:03,034 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-19 08:15:03,035 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-19 08:15:03,035 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-19 08:15:05,049 - INFO - ✅ MT5 initialized successfully
+2025-08-19 12:15:03,224 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-19 12:15:03,225 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-19 12:15:03,225 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-19 12:15:05,236 - INFO - ✅ MT5 initialized successfully
+2025-08-19 16:15:03,600 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-19 16:15:03,601 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-19 16:15:03,601 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-19 16:15:05,616 - INFO - ✅ MT5 initialized successfully

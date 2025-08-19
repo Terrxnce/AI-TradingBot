@@ -26,6 +26,18 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'Data Files'))
 from config import CONFIG
+from symbol_config import get_symbol_config, calculate_proper_sl_tp
+
+# Import new SL/TP upgrade modules
+try:
+    sys.path.append(os.path.join(os.path.dirname(__file__), 'Bot Core'))
+    from adaptive_atr import adaptive_atr_multiplier, calculate_atr_series
+    from htf_validate import validate_structure_basic, get_htf_data, add_structure_age
+    from tp_split import place_split_tps, validate_tp_split_config, calc_price_at_rrr
+    SLTP_UPGRADE_AVAILABLE = True
+except ImportError as e:
+    print(f"⚠️ SL/TP upgrade modules not available: {e}")
+    SLTP_UPGRADE_AVAILABLE = False
 
 def detect_structure_levels(candles_df, entry_price, direction, lookback=20):
     """
@@ -123,38 +135,71 @@ def detect_structure_levels(candles_df, entry_price, direction, lookback=20):
     
     return structures
 
-def find_nearest_structure_behind(entry_price, direction, structures):
+def find_nearest_structure_behind(entry_price, direction, structures, symbol=None):
     """
     Find the nearest valid structure behind the entry price for SL calculation.
     """
     valid_structures = []
     
+    # Get HTF data for validation if enabled
+    htf_df = None
+    if (SLTP_UPGRADE_AVAILABLE and 
+        CONFIG["sltp_system"]["enable_htf_validation"] and 
+        symbol):
+        htf_timeframe = CONFIG["sltp_system"]["htf_timeframe"]
+        htf_df = get_htf_data(symbol, htf_timeframe, 100)
+        min_score = CONFIG["sltp_system"]["htf_min_score"]
+    
     # For BUY orders, look for bearish structures below entry
     if direction == "BUY":
         for ob in structures["ob_levels"]:
             if ob["type"] == "bearish_ob" and ob["price"] < entry_price:
+                # HTF validation
+                if htf_df is not None:
+                    if not validate_structure_basic(ob, htf_df, min_score):
+                        continue
                 valid_structures.append(("OB", ob["price"], ob["strength"]))
         
         for fvg in structures["fvg_levels"]:
             if fvg["type"] == "bearish_fvg" and fvg["price"] < entry_price:
+                # HTF validation
+                if htf_df is not None:
+                    if not validate_structure_basic(fvg, htf_df, min_score):
+                        continue
                 valid_structures.append(("FVG", fvg["price"], fvg["gap_size"]))
         
         for bos in structures["bos_levels"]:
             if bos["type"] == "bullish_bos" and bos["price"] < entry_price:
+                # HTF validation
+                if htf_df is not None:
+                    if not validate_structure_basic(bos, htf_df, min_score):
+                        continue
                 valid_structures.append(("BOS", bos["price"], 1.0))
     
     # For SELL orders, look for bullish structures above entry
     else:  # SELL
         for ob in structures["ob_levels"]:
             if ob["type"] == "bullish_ob" and ob["price"] > entry_price:
+                # HTF validation
+                if htf_df is not None:
+                    if not validate_structure_basic(ob, htf_df, min_score):
+                        continue
                 valid_structures.append(("OB", ob["price"], ob["strength"]))
         
         for fvg in structures["fvg_levels"]:
             if fvg["type"] == "bullish_fvg" and fvg["price"] > entry_price:
+                # HTF validation
+                if htf_df is not None:
+                    if not validate_structure_basic(fvg, htf_df, min_score):
+                        continue
                 valid_structures.append(("FVG", fvg["price"], fvg["gap_size"]))
         
         for bos in structures["bos_levels"]:
             if bos["type"] == "bearish_bos" and bos["price"] > entry_price:
+                # HTF validation
+                if htf_df is not None:
+                    if not validate_structure_basic(bos, htf_df, min_score):
+                        continue
                 valid_structures.append(("BOS", bos["price"], 1.0))
     
     if not valid_structures:
@@ -251,7 +296,7 @@ def calculate_session_adjustment(session_time, entry_price, sl, tp, direction):
     
     return tp, "None"
 
-def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=None):
+def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=None, symbol=None):
     """
     Calculate structure-aware SL and TP levels.
     
@@ -264,25 +309,77 @@ def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=
     Returns:
         dict: SL, TP, RRR, and calculation details
     """
+    # Use symbol-specific configuration for proper SL/TP calculation
+    if symbol:
+        print(f"🧱 Calculating proper SL/TP for {symbol} using symbol-specific config")
+        proper_calc = calculate_proper_sl_tp(symbol, entry_price, direction)
+        
+        # Get symbol config for additional info
+        symbol_config = get_symbol_config(symbol)
+        
+        # Detect structures for validation (optional enhancement)
+        structures = {"ob_levels": [], "fvg_levels": [], "bos_levels": []}
+        if len(candles_df) >= 20:
+            structures = detect_structure_levels(candles_df, entry_price, direction)
+        
+        # Calculate session adjustment (if any)
+        session_adjustment = "None"
+        if session_time:
+            session_adjustment = calculate_session_adjustment(
+                session_time, entry_price, proper_calc["sl"], proper_calc["tp"], direction
+            )
+        
+        return {
+            "sl": proper_calc["sl"],
+            "tp": proper_calc["tp"],
+            "expected_rrr": proper_calc["rrr"],
+            "rrr_passed": proper_calc["rrr"] >= 1.5,  # Minimum 1.5:1 RRR
+            "rrr_reason": f"Symbol-specific calculation: {proper_calc['rrr']}:1 RRR",
+            "sl_from": f"Symbol config ({symbol_config['asset_class']})",
+            "tp_from": f"Symbol config ({symbol_config['asset_class']})",
+            "session_adjustment": session_adjustment,
+            "atr": 0.0,  # Not used in symbol-specific calculation
+            "structures_found": {
+                "ob_count": len(structures["ob_levels"]),
+                "fvg_count": len(structures["fvg_levels"]),
+                "bos_count": len(structures["bos_levels"])
+            },
+            "atr_multiplier": "N/A",
+            "htf_validation_score": "N/A",
+            "tp_split_enabled": False,  # Disabled for D.E.V.I system
+            "system": "symbol_specific_v2"
+        }
+    
+    # Fallback for missing symbol or insufficient data
     if len(candles_df) < 20:
-        # Fallback to ATR-based calculation if insufficient data
+        print("⚠️ Insufficient data for structure analysis. Using ATR fallback.")
         return calculate_atr_fallback(candles_df, entry_price, direction, session_time)
     
     # Detect structure levels
     structures = detect_structure_levels(candles_df, entry_price, direction)
     
+    # Add age information for HTF validation
+    if SLTP_UPGRADE_AVAILABLE and CONFIG["sltp_system"]["enable_htf_validation"]:
+        structures = add_structure_age(structures, len(candles_df) - 1)
+    
     # Calculate ATR for buffer
-    atr_series = average_true_range(
-        high=candles_df['high'],
-        low=candles_df['low'],
-        close=candles_df['close'],
-        window=14
-    )
-    atr = atr_series.iloc[-1]
+    if SLTP_UPGRADE_AVAILABLE and CONFIG["sltp_system"]["enable_adaptive_atr"]:
+        atr_series = calculate_atr_series(candles_df, 14)
+        atr = atr_series.iloc[-1]
+        atr_multiplier = adaptive_atr_multiplier(atr_series, CONFIG["sltp_system"]["adaptive_atr"])
+    else:
+        atr_series = average_true_range(
+            high=candles_df['high'],
+            low=candles_df['low'],
+            close=candles_df['close'],
+            window=14
+        )
+        atr = atr_series.iloc[-1]
+        atr_multiplier = 1.5  # Default multiplier
     
     # Find SL structure (behind entry)
     sl_structure_type, sl_structure_price, sl_structure_strength = find_nearest_structure_behind(
-        entry_price, direction, structures
+        entry_price, direction, structures, symbol
     )
     
     # Calculate SL
@@ -297,23 +394,27 @@ def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=
             sl = sl_structure_price + buffer
             sl_from = f"{sl_structure_type} + ATR buffer"
     else:
-        # Fallback to ATR-based SL (increased multiplier for wider stops)
+        # 🎯 PRIORITY: Use config-based SL instead of ATR fallback
+        config_sl_pips = CONFIG.get("sl_pips", 80)
+        pip_size = 0.0001 if "JPY" not in symbol else 0.01
+        config_sl_distance = config_sl_pips * pip_size
+        
         if direction == "BUY":
-            sl = entry_price - (atr * 1.5)  # Increased from 0.5 to 1.5
-            sl_from = "ATR fallback"
+            sl = entry_price - config_sl_distance
+            sl_from = f"Config-based fallback ({config_sl_pips} pips)"
         else:  # SELL
-            sl = entry_price + (atr * 1.5)  # Increased from 0.5 to 1.5
-            sl_from = "ATR fallback"
+            sl = entry_price + config_sl_distance
+            sl_from = f"Config-based fallback ({config_sl_pips} pips)"
     
     # Validate SL position
     if direction == "BUY" and sl >= entry_price:
         print(f"⚠️ Invalid SL for BUY: {sl} >= {entry_price}, using ATR fallback")
-        sl = entry_price - (atr * 1.5)  # Increased from 0.5 to 1.5
-        sl_from = "ATR fallback (invalid structure)"
-    elif direction == "SELL" and sl >= entry_price:  # Fixed: SELL SL should be BELOW entry
-        print(f"⚠️ Invalid SL for SELL: {sl} >= {entry_price}, using ATR fallback")
-        sl = entry_price + (atr * 1.5)  # Increased from 0.5 to 1.5
-        sl_from = "ATR fallback (invalid structure)"
+        sl = entry_price - (atr * atr_multiplier)
+        sl_from = f"ATR fallback (invalid structure, {atr_multiplier:.1f}x)"
+    elif direction == "SELL" and sl <= entry_price:  # SELL SL should be ABOVE entry
+        print(f"⚠️ Invalid SL for SELL: {sl} <= {entry_price}, using ATR fallback")
+        sl = entry_price + (atr * atr_multiplier)
+        sl_from = f"ATR fallback (invalid structure, {atr_multiplier:.1f}x)"
     
     # Find TP structure (ahead of entry)
     tp_structure_type, tp_structure_price, tp_structure_strength = find_next_structure_ahead(
@@ -325,13 +426,17 @@ def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=
         tp = tp_structure_price
         tp_from = f"Next {tp_structure_type}"
     else:
-        # Fallback to 2:1 RRR
+        # 🎯 PRIORITY: Use config-based TP instead of 2:1 RRR fallback
+        config_tp_pips = CONFIG.get("tp_pips", 160)
+        pip_size = 0.0001 if "JPY" not in symbol else 0.01
+        config_tp_distance = config_tp_pips * pip_size
+        
         if direction == "BUY":
-            tp = entry_price + (entry_price - sl) * 2.0
-            tp_from = "2:1 RRR fallback"
+            tp = entry_price + config_tp_distance
+            tp_from = f"Config-based fallback ({config_tp_pips} pips)"
         else:  # SELL
-            tp = entry_price - (sl - entry_price) * 2.0
-            tp_from = "2:1 RRR fallback"
+            tp = entry_price - config_tp_distance
+            tp_from = f"Config-based fallback ({config_tp_pips} pips)"
     
     # Apply session adjustments
     adjusted_tp, session_adjustment = calculate_session_adjustment(
@@ -342,6 +447,34 @@ def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=
     sl_distance = abs(entry_price - sl)
     tp_distance = abs(adjusted_tp - entry_price)
     expected_rrr = tp_distance / sl_distance if sl_distance > 0 else 0
+    
+    # 🎯 PRIORITY: Use config-based SL/TP if structure-based is too small
+    config_sl_pips = CONFIG.get("sl_pips", 80)
+    config_tp_pips = CONFIG.get("tp_pips", 160)
+    
+    # Convert pips to price distance
+    pip_size = 0.0001 if "JPY" not in symbol else 0.01
+    config_sl_distance = config_sl_pips * pip_size
+    config_tp_distance = config_tp_pips * pip_size
+    
+    # Check if current SL/TP are too small compared to config
+    if sl_distance < config_sl_distance:
+        print(f"⚠️ Structure SL ({sl_distance:.5f}) smaller than config ({config_sl_distance:.5f}), using config")
+        if direction == "BUY":
+            sl = entry_price - config_sl_distance
+        else:  # SELL
+            sl = entry_price + config_sl_distance
+        sl_from = f"Config-based ({config_sl_pips} pips)"
+        sl_distance = config_sl_distance
+    
+    if tp_distance < config_tp_distance:
+        print(f"⚠️ Structure TP ({tp_distance:.5f}) smaller than config ({config_tp_distance:.5f}), using config")
+        if direction == "BUY":
+            adjusted_tp = entry_price + config_tp_distance
+        else:  # SELL
+            adjusted_tp = entry_price - config_tp_distance
+        tp_from = f"Config-based ({config_tp_pips} pips)"
+        tp_distance = config_tp_distance
     
     # Ensure minimum SL distance (at least 15 pips for JPY pairs, 10 for others)
     min_sl_distance = 0.0015 if "JPY" in symbol else 0.0010  # 15 pips for JPY, 10 for others
@@ -357,6 +490,23 @@ def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=
         tp_distance = abs(adjusted_tp - entry_price)
         expected_rrr = tp_distance / sl_distance if sl_distance > 0 else 0
     
+    # Prepare TP split information if enabled
+    tp_split_info = None
+    if (SLTP_UPGRADE_AVAILABLE and
+        CONFIG["sltp_system"]["enable_tp_split"] and 
+        symbol):
+        tp_split_info = {
+            "enabled": True,
+            "tp1_price": calc_price_at_rrr(entry_price, sl, 1.0, direction == "BUY"),
+            "tp2_price": calc_price_at_rrr(entry_price, sl, 2.0, direction == "BUY"),
+            "tp1_ratio": 1.0,
+            "tp2_ratio": 2.0,
+            "tp1_size": 0.30,
+            "tp2_size": 0.70
+        }
+    else:
+        tp_split_info = {"enabled": False}
+    
     return {
         "sl": round(sl, 5),
         "tp": round(adjusted_tp, 5),
@@ -365,51 +515,40 @@ def calculate_structural_sl_tp(candles_df, entry_price, direction, session_time=
         "tp_from": tp_from,
         "session_adjustment": session_adjustment,
         "atr": round(atr, 5),
+        "atr_multiplier": atr_multiplier,
         "structures_found": {
             "ob_count": len(structures["ob_levels"]),
             "fvg_count": len(structures["fvg_levels"]),
             "bos_count": len(structures["bos_levels"])
-        }
+        },
+        "tp_split": tp_split_info,
+        "htf_validation_score": "N/A"  # Will be populated if HTF validation is used
     }
 
 def calculate_atr_fallback(candles_df, entry_price, direction, session_time=None):
     """
-    Fallback to ATR-based calculation when insufficient data for structure analysis.
+    Fallback to config-based calculation when insufficient data for structure analysis.
     """
-    if len(candles_df) < 14:
-        # Use fixed pip values as last resort
-        if direction == "BUY":
-            sl = entry_price - 0.0050  # 50 pips
-            tp = entry_price + 0.0100  # 100 pips
-        else:  # SELL
-            sl = entry_price + 0.0050  # 50 pips
-            tp = entry_price - 0.0100  # 100 pips
-        
-        expected_rrr = 2.0
-        sl_from = "Fixed 50 pips"
-        tp_from = "Fixed 100 pips"
-        session_adjustment = "None"
-    else:
-        # ATR-based calculation
-        atr_series = average_true_range(
-            high=candles_df['high'],
-            low=candles_df['low'],
-            close=candles_df['close'],
-            window=14
-        )
-        atr = atr_series.iloc[-1]
-        
-        if direction == "BUY":
-            sl = entry_price - (atr * 0.5)
-            tp = entry_price + (atr * 1.0)
-        else:  # SELL
-            sl = entry_price + (atr * 0.5)
-            tp = entry_price - (atr * 1.0)
-        
-        expected_rrr = 2.0
-        sl_from = f"ATR fallback ({round(atr, 5)})"
-        tp_from = f"ATR fallback ({round(atr, 5)})"
-        session_adjustment = "None"
+    # 🎯 PRIORITY: Use config values instead of ATR-based calculation
+    config_sl_pips = CONFIG.get("sl_pips", 80)
+    config_tp_pips = CONFIG.get("tp_pips", 160)
+    
+    # Convert pips to price distance (assuming major pairs)
+    pip_size = 0.0001  # For major pairs like EURUSD, GBPUSD
+    config_sl_distance = config_sl_pips * pip_size
+    config_tp_distance = config_tp_pips * pip_size
+    
+    if direction == "BUY":
+        sl = entry_price - config_sl_distance
+        tp = entry_price + config_tp_distance
+    else:  # SELL
+        sl = entry_price + config_sl_distance
+        tp = entry_price - config_tp_distance
+    
+    expected_rrr = config_tp_pips / config_sl_pips  # 160/80 = 2.0
+    sl_from = f"Config fallback ({config_sl_pips} pips)"
+    tp_from = f"Config fallback ({config_tp_pips} pips)"
+    session_adjustment = "None"
     
     return {
         "sl": round(sl, 5),
@@ -418,7 +557,7 @@ def calculate_atr_fallback(candles_df, entry_price, direction, session_time=None
         "sl_from": sl_from,
         "tp_from": tp_from,
         "session_adjustment": session_adjustment,
-        "atr": round(atr, 5) if len(candles_df) >= 14 else 0.0001,
+        "atr": 0.0001,  # Default ATR value for fallback
         "structures_found": {
             "ob_count": 0,
             "fvg_count": 0,

@@ -1,46 +1,57 @@
+#!/usr/bin/env python3
+"""
+impulse_detector.py - Impulse Move Detection
+Detects strong directional moves in price action
+"""
+
 import pandas as pd
+import numpy as np
 
-def detect_impulsive_move(candles: pd.DataFrame, window=10, multiplier=1.8, debug=False):
+def detect_impulsive_move(df, lookback=5, threshold=0.002):
     """
-    Detects recent impulsive move (bullish or bearish) based on breakout candle.
-
+    Detect impulsive moves in price action
+    
+    Args:
+        df: DataFrame with OHLC data
+        lookback: Number of candles to look back
+        threshold: Minimum move threshold (0.002 = 0.2%)
+    
     Returns:
-        "bullish" | "bearish" | None
+        dict: Impulse move information or None
     """
-    if candles is None or len(candles) < window + 1:
+    if len(df) < lookback + 1:
         return None
-
-    # Ensure required columns exist
-    required_cols = {"high", "low", "open", "close"}
-    if not required_cols.issubset(candles.columns):
-        if debug:
-            print(f"❌ Missing columns in candles: {required_cols - set(candles.columns)}")
-        return None
-
-    recent = candles.iloc[-1]
-    prior = candles.iloc[-(window+1):-1]
-
-    prior_ranges = prior["high"] - prior["low"]
-    avg_range = prior_ranges.mean()
-
-    current_range = recent["high"] - recent["low"]
-    body = abs(recent["close"] - recent["open"])
-    bullish = recent["close"] > recent["open"]
-    bearish = recent["close"] < recent["open"]
-
-    broke_above = recent["close"] > prior["high"].max()
-    broke_below = recent["close"] < prior["low"].min()
-
-    if debug:
-        print(f"🧪 Impulse Check → Current Range: {current_range:.5f} | Avg Range: {avg_range:.5f}")
-        print(f"Body: {body:.5f} | Broke Above: {broke_above} | Broke Below: {broke_below}")
-
-    if current_range > multiplier * avg_range and body > 0.7 * current_range:
-        if bullish and broke_above:
-            if debug: print("✅ Bullish impulse detected.")
-            return "bullish"
-        elif bearish and broke_below:
-            if debug: print("✅ Bearish impulse detected.")
-            return "bearish"
-
+    
+    # Get recent candles
+    recent = df.tail(lookback + 1)
+    
+    # Calculate price changes
+    price_changes = recent['close'].pct_change().dropna()
+    
+    # Check for strong directional move
+    if len(price_changes) >= 3:
+        # Look for 3 consecutive moves in same direction
+        recent_changes = price_changes.tail(3)
+        
+        # All positive (bullish impulse)
+        if all(change > threshold for change in recent_changes):
+            return {
+                "type": "bullish",
+                "strength": recent_changes.mean(),
+                "duration": 3,
+                "start_price": recent.iloc[-4]['close'],
+                "end_price": recent.iloc[-1]['close']
+            }
+        
+        # All negative (bearish impulse)
+        elif all(change < -threshold for change in recent_changes):
+            return {
+                "type": "bearish", 
+                "strength": abs(recent_changes.mean()),
+                "duration": 3,
+                "start_price": recent.iloc[-4]['close'],
+                "end_price": recent.iloc[-1]['close']
+            }
+    
     return None
+

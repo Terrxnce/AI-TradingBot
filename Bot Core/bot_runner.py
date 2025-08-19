@@ -5,64 +5,85 @@
 # 📂 Project: Smart Multi-Timeframe Trading Bot
 # ------------------------------------------------------------------------------------
 
+# Standard library imports
 import sys
+import os
 import time
+import json
+import importlib
+import argparse
+from datetime import datetime, timedelta, time as dt_time, timezone
+
+# Third-party imports
 import MetaTrader5 as mt5
 import requests
-from datetime import datetime, timedelta
-import sys
-import os
+
+# Local imports - add paths
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
+
+# Core bot modules
 from get_candles import get_latest_candle_data
 from strategy_engine import analyze_structure
-from decision_engine import evaluate_trade_decision, calculate_dynamic_sl_tp, calculate_structural_sl_tp_with_validation, build_ai_prompt
+from decision_engine import (
+    evaluate_trade_decision, 
+    calculate_dynamic_sl_tp, 
+    calculate_structural_sl_tp_with_validation, 
+    build_ai_prompt
+)
 from broker_interface import initialize_mt5, shutdown_mt5, place_trade
-import importlib
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
+
+# Configuration and utilities
 import config
+from shared.settings import get_user_paths
+from shared.time_align import next_boundary_utc, sleep_until, now_utc
+
+# Trading modules
 from trailing_stop import apply_trailing_stop
-from position_manager import check_for_partial_close, close_trades_at_4pm
+from position_manager import close_trades_at_4pm
 from risk_guard import can_trade
 from trade_logger import log_trade
 from session_utils import detect_session
 from news_guard import get_macro_sentiment, should_block_trading
-from profit_guard import check_and_lock_profits
+from equity_cycle_manager import check_equity_cycle, is_trades_paused
+
+# Error handling and monitoring
 from error_handler import safe_mt5_operation, validate_trade_parameters, performance_monitor
 from performance_metrics import performance_metrics
-from notifier import send_bot_online_notification, send_trading_complete_notification, send_bot_offline_notification
-import json 
+from notifier import (
+    send_bot_online_notification, 
+    send_trading_complete_notification, 
+    send_bot_offline_notification
+)
 
-
-
-from datetime import time as dt_time
-import argparse
-from datetime import timezone
-from shared.settings import get_user_paths
-from shared.time_align import next_boundary_utc, sleep_until, now_utc
+# Logging utilities
+from shared.logging_utils import (
+    get_logger, log_error, log_warning, log_success, log_info, 
+    log_trade_decision, log_trade_execution
+)
 
 def reload_config():
     """Dynamically reload configuration from config.py"""
+    logger = get_logger()
+    
     try:
         importlib.reload(config)
         config_data = config.CONFIG
         
-        # Validate required config fields
+        # Validate required config fields (old profit management fields removed for D.E.V.I)
         required_fields = [
-            "min_score_for_trade", "lot_size", "delay_seconds",
-            "partial_close_trigger_percent", "full_close_trigger_percent",
+            "lot_size", "delay_seconds",
             "allowed_trading_window"
         ]
         
         missing_fields = [field for field in required_fields if field not in config_data]
         if missing_fields:
-            print(f"⚠️ Missing required config fields: {missing_fields}")
-            print("⚠️ Using default values where possible")
+            log_warning(f"Missing required config fields: {missing_fields}", "config_reload", logger)
+            log_warning("Using default values where possible", "config_reload", logger)
         
         return config_data
     except Exception as e:
-        print(f"⚠️ Failed to reload config: {e}")
+        log_error(e, "config_reload", logger)
         return config.CONFIG
 
 
@@ -90,11 +111,13 @@ def is_pm_session():
 
 
 def align_if_needed():
+    logger = get_logger()
+    
     if args.align == "off":
         return
     interval = 900 if args.align == "quarter" else max(5, args.interval_sec or 900)
     target = next_boundary_utc(interval_sec=interval, skew_sec=3)
-    print(f"[{now_utc().isoformat()}] Aligning to next boundary at {target.isoformat()} (interval={interval}s)")
+    log_info(f"Aligning to next boundary at {target.isoformat()} (interval={interval}s)", "alignment", logger)
     sleep_until(target)
 
 
@@ -164,9 +187,9 @@ def log_ai_decision(symbol, ai_data, timestamp=None, extra_fields=None):
     try:
         with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
-        print(f"✅ AI decision logged for {symbol}")
+        log_success(f"AI decision logged for {symbol}", "ai_logging", logger)
     except Exception as e:
-        print(f"❌ Failed to write AI decision log: {e}")
+        log_error(e, "ai_logging", logger)
 
 
 # === AI Sentiment ===
@@ -195,17 +218,20 @@ def ensure_symbol_visible(symbol):
 
 # === Main Bot Logic ===
 def run_bot():
+    """Main bot loop with enhanced error handling and performance monitoring"""
+    logger = get_logger()
+    
     # Initialize MT5 directly first
     try:
         initialize_mt5()
-        print("✅ MT5 initialized")
+        log_success("MT5 initialized", "bot_initialization", logger)
     except Exception as e:
-        print(f"❌ Failed to initialize MT5: {e}")
+        log_error(e, "bot_initialization", logger)
         return
     
     # Verify connection with error handling
     if not safe_mt5_operation(lambda: mt5.terminal_info() and mt5.version()):
-        print("❌ MT5 connection verification failed")
+        log_error(Exception("MT5 connection verification failed"), "bot_initialization", logger)
         return
     
     # Send bot online notification
@@ -321,7 +347,8 @@ def run_bot():
                         f.write(json.dumps(log_entry) + "\n")
                     continue
 
-                check_and_lock_profits()
+                # Check D.E.V.I equity cycle management
+                check_equity_cycle()
 
                 if current_config.get("restrict_usd_to_am", False):
                     keywords = current_config.get("usd_related_keywords", [])
@@ -395,6 +422,7 @@ def run_bot():
                 decision = evaluate_trade_decision(ta_signals, ai_sentiment)
                 print(f"📈 Trade Decision: {decision}")
 
+                # Calculate technical score (will be ignored if using 8-point system)
                 technical_score = 0.0
                 if ta_signals.get("bos") in ["bullish", "bearish"]:
                     technical_score += 2.0
@@ -409,16 +437,26 @@ def run_bot():
                 if ta_signals.get("engulfing"):
                     technical_score += 0.5
 
-                if not can_trade(ta_signals=ta_signals, ai_response_raw=ai_sentiment, call_ai_func=get_ai_sentiment, tech_score=technical_score):
-                    print(f"⚠️ Skipped {symbol} — blocked by risk_guard.")
+                # Import the enhanced diagnostic function
+                from risk_guard import get_trade_block_reason
+                
+                can_trade_flag, block_reason, block_details = get_trade_block_reason(
+                    ta_signals=ta_signals, 
+                    ai_response_raw=ai_sentiment, 
+                    call_ai_func=get_ai_sentiment, 
+                    tech_score=technical_score
+                )
+                
+                if not can_trade_flag:
+                    print(f"⚠️ Skipped {symbol} — {block_reason}: {block_details}")
                     # Log missed trade reason
                     log_entry = {
                         "timestamp": datetime.now().isoformat(),
                         "symbol": symbol,
                         "ai_decision": "BLOCKED",
                         "ai_confidence": "N/A",
-                        "ai_reasoning": "Risk management blocked trade",
-                        "ai_risk_note": "Daily loss limit, drawdown, or cooldown active",
+                        "ai_reasoning": f"Risk management blocked trade: {block_reason}",
+                        "ai_risk_note": block_details,
                         "technical_score": technical_score,
                         "ema_trend": ta_signals.get("ema_trend", "N/A"),
                         "final_direction": "BLOCKED",
@@ -426,6 +464,29 @@ def run_bot():
                         "ai_override": False,
                         "override_reason": "Risk guard",
                         "execution_source": "risk_block"
+                    }
+                    with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
+                        f.write(json.dumps(log_entry) + "\n")
+                    continue
+
+                # Check if trades are paused due to +2% equity cycle trigger
+                if is_trades_paused():
+                    print(f"⏸️ Skipped {symbol} — trades paused due to +2% equity cycle trigger.")
+                    # Log missed trade reason
+                    log_entry = {
+                        "timestamp": datetime.now().isoformat(),
+                        "symbol": symbol,
+                        "ai_decision": "PAUSED",
+                        "ai_confidence": "N/A",
+                        "ai_reasoning": "Trades paused due to +2% equity cycle trigger",
+                        "ai_risk_note": "Daily profit target exceeded",
+                        "technical_score": technical_score,
+                        "ema_trend": ta_signals.get("ema_trend", "N/A"),
+                        "final_direction": "PAUSED",
+                        "executed": False,
+                        "ai_override": False,
+                        "override_reason": "Equity cycle pause",
+                        "execution_source": "equity_cycle_pause"
                     }
                     with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
                         f.write(json.dumps(log_entry) + "\n")
@@ -452,7 +513,7 @@ def run_bot():
                         "override_reason": "Trade limit",
                         "execution_source": "frequency_block"
                     }
-                    with open("ai_decision_log.jsonl", "a") as f:
+                    with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
                         f.write(json.dumps(log_entry) + "\n")
                     continue
 
@@ -463,7 +524,11 @@ def run_bot():
                 execution_source = "AI"
                 override_reason = ""
 
-                if technical_score >= current_config["min_score_for_trade"] and ema_trend in ["bullish", "bearish"]:
+                # Use tech_scoring as single source of truth for score threshold
+                tech_cfg = current_config.get("tech_scoring", {})
+                min_score_threshold = tech_cfg.get("min_score_for_trade", 6.0)
+                
+                if technical_score >= min_score_threshold and ema_trend in ["bullish", "bearish"]:
                     if ai_direction == "HOLD":
                         final_direction = "BUY" if ema_trend == "bullish" else "SELL"
                         execution_source = "technical_override"
@@ -472,6 +537,13 @@ def run_bot():
                 success = False
                 sl_tp_result = None  # Initialize for logging
                 if final_direction in ["BUY", "SELL"]:
+                    # Initialize variables to prevent UnboundLocalError
+                    lot = None
+                    sl = None
+                    tp = None
+                    price = None
+                    sl_tp_result = None
+                    
                     try:
                         if not mt5.terminal_info() or not mt5.version():
                             print("⚠️ Reinitializing MT5 before trade placement...")
@@ -488,7 +560,8 @@ def run_bot():
                             entry_price=price,
                             direction=final_direction,
                             session_time=datetime.now(),
-                            technical_score=technical_score
+                            technical_score=technical_score,
+                            symbol=symbol
                         )
                         
                         # 🛡️ RRR Validation - Block trades with insufficient risk-reward
@@ -502,13 +575,47 @@ def run_bot():
                         sl = sl_tp_result["sl"]
                         tp = sl_tp_result["tp"]
                         
-                        lot_sizes = {k.upper(): v for k, v in current_config.get("LOT_SIZES", {}).items()}
-                        lot = lot_sizes.get(symbol_key, current_config.get("lot_size", 1.0))
+                        # 🧱 NEW: Use adaptive lot size from structure-aware system if available
+                        if sl_tp_result.get("lot_size") is not None:
+                            # Use the adaptive lot size from the structure-aware system
+                            adaptive_lot = sl_tp_result["lot_size"]
+                            
+                            # Validate lot size against broker requirements
+                            if adaptive_lot >= 0.01 and adaptive_lot <= 100.0:
+                                # Round to valid broker lot size increments
+                                if adaptive_lot < 0.1:
+                                    lot = round(adaptive_lot, 2)  # 0.01, 0.02, 0.05, etc.
+                                elif adaptive_lot < 1.0:
+                                    lot = round(adaptive_lot, 1)  # 0.1, 0.2, 0.5, etc.
+                                else:
+                                    lot = round(adaptive_lot)  # 1.0, 2.0, etc.
+                                
+                                # Ensure minimum valid lot size
+                                if lot < 0.01:
+                                    lot = 0.01
+                                
+                                print(f"🧱 Using adaptive lot size from structure-aware system: {lot}")
+                            else:
+                                # Fallback to config-based lot sizing if adaptive lot is invalid
+                                lot_sizes = {k.upper(): v for k, v in current_config.get("lot_sizes", {}).items()}
+                                lot = lot_sizes.get(symbol_key, current_config.get("default_lot_size", 0.1))
+                                print(f"🧱 Adaptive lot size {adaptive_lot} invalid, using config-based: {lot}")
+                        else:
+                            # Fallback to config-based lot sizing
+                            lot_sizes = {k.upper(): v for k, v in current_config.get("lot_sizes", {}).items()}
+                            lot = lot_sizes.get(symbol_key, current_config.get("default_lot_size", 0.1))
+                            print(f"🧱 Using config-based lot size: {lot}")
 
                         print(f"🧶 Resolved lot size for {symbol}: {lot}")
                         print(f"🧱 Structural SL: {sl} ({sl_tp_result['sl_from']}) | TP: {tp} ({sl_tp_result['tp_from']})")
                         print(f"⚖️ Expected RRR: {sl_tp_result['expected_rrr']:.3f} | Session: {sl_tp_result['session_adjustment']}")
-                        print(f"🏗️ Structures found: OB={sl_tp_result['structures_found']['ob_count']}, FVG={sl_tp_result['structures_found']['fvg_count']}, BOS={sl_tp_result['structures_found']['bos_count']}")
+                        # Map new structure format to display format
+                        structures = sl_tp_result['structures_found']
+                        ob_count = structures.get('order_blocks', 0)
+                        fvg_count = structures.get('fair_value_gaps', 0)
+                        bos_count = structures.get('break_structures', 0)
+                        swing_count = structures.get('swing_levels', 0)
+                        print(f"🏗️ Structures found: OB={ob_count}, FVG={fvg_count}, BOS={bos_count}, Swing={swing_count}")
 
                         # Validate trade parameters before execution
                         if not validate_trade_parameters(symbol, lot, sl, tp):
@@ -534,7 +641,25 @@ def run_bot():
 
                     except Exception as err:
                         print(f"❌ SL/TP or lot sizing error: {err}")
-                        log_trade(symbol, final_direction, lot, sl, tp, price, result=f"FAILED: {err}")
+                        print(f"🔍 Error details: {type(err).__name__}: {str(err)}")
+                        
+                        # Use safe values for logging if variables weren't set
+                        safe_lot = lot if lot is not None else 0.0
+                        safe_sl = sl if sl is not None else 0.0
+                        safe_tp = tp if tp is not None else 0.0
+                        safe_price = price if price is not None else 0.0
+                        
+                        # Log the error with more details
+                        error_details = {
+                            "error_type": type(err).__name__,
+                            "error_message": str(err),
+                            "sl_tp_result": sl_tp_result if sl_tp_result else "None",
+                            "symbol": symbol,
+                            "direction": final_direction
+                        }
+                        print(f"🔍 Error details: {error_details}")
+                        
+                        log_trade(symbol, final_direction, safe_lot, safe_sl, safe_tp, safe_price, result=f"FAILED: {err}")
 
                 log_entry = {
                     "timestamp": datetime.now().isoformat(),
@@ -561,7 +686,10 @@ def run_bot():
                         "tp_from": sl_tp_result.get("tp_from"),
                         "session_adjustment": sl_tp_result.get("session_adjustment"),
                         "structures_found": sl_tp_result.get("structures_found"),
-                        "atr": sl_tp_result.get("atr")
+                        "atr": sl_tp_result.get("atr"),
+                        "lot_size": sl_tp_result.get("lot_size"),
+                        "confidence": sl_tp_result.get("confidence"),
+                        "fallback_used": sl_tp_result.get("fallback_used")
                     } if sl_tp_result is not None else None
                 }
 
@@ -569,7 +697,7 @@ def run_bot():
                     f.write(json.dumps(log_entry) + "\n")
 
             apply_trailing_stop(minutes=30, trail_pips=20)
-            check_for_partial_close()
+            # Old partial close system removed - now handled by equity cycle manager
             
             # Update heartbeat for GUI status monitoring (ALWAYS update, even if no trades)
             try:
@@ -600,15 +728,15 @@ def run_bot():
             
             # Refresh news data daily (at midnight)
             if now.hour == 0 and now.minute < 5:
-                print("\n📰 Refreshing news data from Forex Factory...")
+                print("\n📰 Reloading manually updated news data...")
                 try:
                     from news_guard import refresh_news_data
                     if refresh_news_data():
-                        print("✅ News data refreshed successfully")
+                        print("✅ News data reloaded successfully")
                     else:
-                        print("⚠️ News data refresh failed")
+                        print("⚠️ News data reload failed")
                 except Exception as e:
-                    print(f"❌ Error refreshing news data: {e}")
+                    print(f"❌ Error reloading news data: {e}")
             
             loop_count += 1
             if args.align == "off":

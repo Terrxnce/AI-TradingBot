@@ -205,29 +205,127 @@ def analyze_structure(candles_df, candles_df_h1=None, timeframe=mt5.TIMEFRAME_M1
         if rsi_ok:
             confluence_context.append(rsi_text)
 
-    # 🔍 Logs
-    print("📈 EMA Values → EMA_21:", row['EMA_21'], "| EMA_50:", row['EMA_50'], "| EMA_200:", row['EMA_200'])
-    print("📊 Final EMA trend classification:", trend)
-    print("🔍 Latest BOS:", latest_bos)
-    print("🧠 Impulse Detected:", impulse)
-    if confluence_context:
-        print("🧩 RSI/Fib Context:", " | ".join(confluence_context))
-    print("🕐 Current Session:", detect_session())
-    print("✅ analyze_structure() completed for", candles_df.iloc[-1]["time"])
+    # 🔍 Logs - Using structured logging instead of print statements
+    # Note: These logs are now handled by the calling function for better organization
 
-    if h1_trend:
-        print("🧭 H1 Trend Confirmation:", h1_trend)
-
+    # Enhanced structure analysis for new scoring system
+    bos_confirmed = latest_bos is not None
+    bos_direction = latest_bos if latest_bos else "NEUTRAL"
+    
+    fvg_valid = any(fvg[1] == trend for fvg in result["fvg"] if isinstance(fvg, (list, tuple)) and len(fvg) >= 4)
+    # FVG fill detection - check if price has moved through the FVG
+    fvg_filled = False
+    if fvg_valid and len(candles_df) > 1:
+        current_price = candles_df.iloc[-1]['close']
+        for fvg in result["fvg"]:
+            # Validate FVG structure before accessing
+            if not isinstance(fvg, (list, tuple)) or len(fvg) < 4:
+                continue
+            try:
+                if fvg[1] == trend:  # FVG in trend direction
+                    fvg_high, fvg_low = fvg[2], fvg[3]
+                    if trend == "bullish" and current_price > fvg_high:
+                        fvg_filled = True
+                        break
+                    elif trend == "bearish" and current_price < fvg_low:
+                        fvg_filled = True
+                        break
+            except (IndexError, KeyError, TypeError) as e:
+                print(f"⚠️ Error processing FVG data: {e}")
+                continue
+    fvg_direction = trend if fvg_valid else "NEUTRAL"
+    
+    ob_tap = any(ob[1] == trend for ob in result["order_blocks"] if isinstance(ob, (list, tuple)) and len(ob) >= 2)
+    ob_direction = trend if ob_tap else "NEUTRAL"
+    
+    rejection_at_key_level = len(result["rejections"]) > 0
+    # Next candle confirmation - check if rejection was followed by continuation
+    rejection_confirmed_next = False
+    if rejection_at_key_level and len(candles_df) > 2:
+        for rejection in result["rejections"]:
+            # Validate rejection structure before accessing
+            if not isinstance(rejection, (list, tuple)) or len(rejection) < 2:
+                continue
+            try:
+                rejection_idx = rejection[0]
+                if rejection_idx < len(candles_df) - 1:
+                    next_candle = candles_df.iloc[rejection_idx + 1]
+                    rejection_candle = candles_df.iloc[rejection_idx]
+                    # Check if next candle continued in rejection direction
+                    if rejection[1] == "bullish" and next_candle['close'] > rejection_candle['close']:
+                        rejection_confirmed_next = True
+                        break
+                    elif rejection[1] == "bearish" and next_candle['close'] < rejection_candle['close']:
+                        rejection_confirmed_next = True
+                        break
+            except (IndexError, KeyError, TypeError) as e:
+                print(f"⚠️ Error processing rejection data: {e}")
+                continue
+    rejection_direction = trend if rejection_at_key_level else "NEUTRAL"
+    
+    sweep_recent = len(result["liquidity_sweeps"]) > 0
+    # Reversal confirmation - check if sweep was followed by reversal
+    sweep_reversal_confirmed = False
+    if sweep_recent and len(candles_df) > 2:
+        for sweep in result["liquidity_sweeps"]:
+            # Validate sweep structure before accessing
+            if not isinstance(sweep, (list, tuple)) or len(sweep) < 2:
+                continue
+            try:
+                sweep_idx = sweep[0]
+                if sweep_idx < len(candles_df) - 1:
+                    next_candle = candles_df.iloc[sweep_idx + 1]
+                    sweep_candle = candles_df.iloc[sweep_idx]
+                    # Check if next candle reversed from sweep direction
+                    if sweep[1] == "bullish" and next_candle['close'] < sweep_candle['close']:
+                        sweep_reversal_confirmed = True
+                        break
+                    elif sweep[1] == "bearish" and next_candle['close'] > sweep_candle['close']:
+                        sweep_reversal_confirmed = True
+                        break
+            except (IndexError, KeyError, TypeError) as e:
+                print(f"⚠️ Error processing sweep data: {e}")
+                continue
+    sweep_direction = trend if sweep_recent else "NEUTRAL"
+    
+    engulfing_present = any(e[1] == trend for e in result["engulfings"] if isinstance(e, (list, tuple)) and len(e) >= 2)
+    engulfing_direction = trend if engulfing_present else "NEUTRAL"
+    
+    # EMA alignment checks
+    ema_aligned_m15 = trend in ["bullish", "bearish"]
+    ema_aligned_h1 = h1_trend in ["bullish", "bearish"] if h1_trend else False
+    
     return {
+        # Legacy format (for backward compatibility)
         "bos": latest_bos,
-        "fvg_valid": any(fvg[1] == trend for fvg in result["fvg"]),
-        "ob_tap": any(ob[1] == trend for ob in result["order_blocks"]),
-        "rejection": len(result["rejections"]) > 0,
-        "liquidity_sweep": len(result["liquidity_sweeps"]) > 0,
-        "engulfing": any(e[1] == trend for e in result["engulfings"]),
+        "fvg_valid": fvg_valid,
+        "ob_tap": ob_tap,
+        "rejection": rejection_at_key_level,
+        "liquidity_sweep": sweep_recent,
+        "engulfing": engulfing_present,
         "ema_trend": trend,
         "h1_trend": h1_trend,
         "session": detect_session(),
         "impulse_move": impulse,
-        "confluence_context": confluence_context  # ✅ For AI only
+        "confluence_context": confluence_context,  # ✅ For AI only
+        
+        # NEW: Enhanced structure data for 0-8 scoring
+        "bos_confirmed": bos_confirmed,
+        "bos_direction": bos_direction,
+        "fvg_filled": fvg_filled,
+        "fvg_direction": fvg_direction,
+        "ob_direction": ob_direction,
+        "rejection_confirmed_next": rejection_confirmed_next,
+        "rejection_direction": rejection_direction,
+        "sweep_reversal_confirmed": sweep_reversal_confirmed,
+        "sweep_direction": sweep_direction,
+        "engulfing_direction": engulfing_direction,
+        "ema_aligned_m15": ema_aligned_m15,
+        "ema_aligned_h1": ema_aligned_h1,
+        
+        # EMA values for scoring context
+        "ema21": row['EMA_21'],
+        "ema50": row['EMA_50'],
+        "ema200": row['EMA_200'],
+        "price": row['close']
     }

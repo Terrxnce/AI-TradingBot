@@ -6,12 +6,6 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), 'Data Files'))
 from config import CONFIG
 
-# Import the Forex Factory scraper
-try:
-    from scrape_forex_factory import load_high_impact_news
-except ImportError:
-    print("⚠️ scrape_forex_factory.py not found - using fallback news protection")
-
 def get_news_protection_minutes():
     """Get news protection window from config"""
     return CONFIG.get("news_protection_minutes", 30)  # Default 30 minutes
@@ -22,18 +16,10 @@ def get_news_protection_enabled():
 
 def get_high_impact_news():
     """
-    Get high-impact news events from Forex Factory scraper
-    Only uses real-time data - no fallback to stale data
+    Get high-impact news events from manually updated JSON file
     """
     try:
-        # Try to load from Forex Factory scraper
-        if 'load_high_impact_news' in globals():
-            events = load_high_impact_news()
-            if events:
-                print(f"📰 Loaded {len(events)} high-impact events from Forex Factory")
-                return events
-        
-        # Try to load from existing JSON file (check multiple locations)
+        # Load from manually updated JSON file
         possible_paths = [
             "high_impact_news.json",  # Current directory
             "../high_impact_news.json",  # Parent directory
@@ -52,8 +38,7 @@ def get_high_impact_news():
                 print(f"⚠️ Error loading from {file_path}: {e}")
                 continue
         
-        # No fallback to stale data - only real-time data is acceptable
-        print("⚠️ No real-time news data available - trading without news protection")
+        print("⚠️ No news data available - trading without news protection")
         return []
         
     except Exception as e:
@@ -228,21 +213,29 @@ def should_block_trading():
     Main function to check if trading should be blocked due to news
     Returns True if trading should be blocked
     """
+    # Check if auto-disable is enabled and no real news events exist
+    if CONFIG.get("auto_disable_on_no_news", True):
+        events = get_high_impact_news()
+        # Check if events are just placeholder/no-news entries
+        if events and all(event.get("impact") == "None" or event.get("category") == "Market Status" for event in events):
+            print("📈 No high-impact news today - news protection auto-disabled")
+            return False
+    
     return is_news_protection_active()
 
 def refresh_news_data():
     """
-    Refresh news data by running the Forex Factory scraper
+    Refresh news data by reloading the manually updated JSON file
     """
     try:
-        # Try to import and run the scraper
-        from scrape_forex_factory import main as run_scraper
-        print("🔄 Refreshing news data from Forex Factory...")
-        run_scraper()
-        return True
-    except ImportError:
-        print("⚠️ Forex Factory scraper not available")
-        return False
+        print("🔄 Reloading manually updated news data...")
+        events = get_high_impact_news()
+        if events:
+            print(f"✅ Successfully reloaded {len(events)} news events")
+            return True
+        else:
+            print("⚠️ No news events found in manual JSON file")
+            return False
     except Exception as e:
         print(f"❌ Error refreshing news data: {e}")
         return False

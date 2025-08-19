@@ -374,9 +374,10 @@ def render_config_editor():
         # Core trading settings
         min_score = st.number_input(
             "Minimum Score for Trade",
-            min_value=0,
-            max_value=10,
-            value=config.get("min_score_for_trade", 6),
+            min_value=0.0,
+            max_value=10.0,
+            value=float(config.get("min_score_for_trade", 6)),
+            step=0.1,
             help="Minimum technical score required before considering AI decision"
         )
         
@@ -512,17 +513,18 @@ def render_config_editor():
         st.subheader("🏆 FTMO Parameters")
         initial_balance = st.number_input(
             "Initial Balance",
-            min_value=1000,
-            max_value=1000000,
-            value=ftmo_params.get("initial_balance", 10000),
-            step=1000
+            min_value=1000.0,
+            max_value=1000000.0,
+            value=float(ftmo_params.get("initial_balance", 10000)),
+            step=1000.0
         )
         
         max_daily_loss = st.number_input(
             "Max Daily Loss (%)",
-            min_value=1,
-            max_value=10,
-            value=int(ftmo_params.get("max_daily_loss_pct", 0.05) * 100),
+            min_value=1.0,
+            max_value=10.0,
+            value=float(int(ftmo_params.get("max_daily_loss_pct", 0.05) * 100)),
+            step=0.1,
             help="Maximum daily loss percentage"
         )
     

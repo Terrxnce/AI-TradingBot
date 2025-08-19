@@ -1,10 +1,16 @@
-import MetaTrader5 as mt5
+# Standard library imports
 import sys
 import os
+import time
+
+# Third-party imports
+import MetaTrader5 as mt5
+
+# Local imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
 from config import CONFIG  # Load SL/TP from config
 from notifier import send_trade_notification
-import time
+from shared.logging_utils import get_logger, log_error, log_warning, log_success, log_info
 
 # === MT5 Setup ===
 def initialize_mt5():
@@ -93,21 +99,55 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_
     order_type = mt5.ORDER_TYPE_BUY if action == "BUY" else mt5.ORDER_TYPE_SELL
 
     # === SL/TP Logic ===
+    # Get broker minimum distance requirements
+    stop_level = symbol_info.trade_stops_level or 10
+    freeze_level = symbol_info.trade_freeze_level or 0
+    min_distance = max(stop_level, freeze_level) * point
+    
     if sl is None or tp is None:
         sl_pips = CONFIG.get("sl_pips", 50)
         tp_pips = CONFIG.get("tp_pips", 100)
-
-        stop_level = symbol_info.trade_stops_level or 10
-        freeze_level = symbol_info.trade_freeze_level or 0
-        min_distance = max(stop_level, freeze_level) * point
 
         sl_distance = max(sl_pips * point, min_distance)
         tp_distance = max(tp_pips * point, min_distance)
 
         sl = price - sl_distance if action == "BUY" else price + sl_distance
         tp = price + tp_distance if action == "BUY" else price - tp_distance
+    else:
+        # Validate and adjust provided SL/TP to meet broker requirements
+        if action == "BUY":
+            # For BUY: SL should be below entry, TP should be above entry
+            if sl >= price:
+                sl = price - min_distance
+                print(f"⚠️ Adjusted SL for BUY order: {sl:.{digits}f} (was too high)")
+            elif abs(sl - price) < min_distance:
+                sl = price - min_distance
+                print(f"⚠️ Adjusted SL for minimum distance: {sl:.{digits}f}")
+                
+            if tp <= price:
+                tp = price + min_distance
+                print(f"⚠️ Adjusted TP for BUY order: {tp:.{digits}f} (was too low)")
+            elif abs(tp - price) < min_distance:
+                tp = price + min_distance
+                print(f"⚠️ Adjusted TP for minimum distance: {tp:.{digits}f}")
+        else:  # SELL
+            # For SELL: SL should be above entry, TP should be below entry
+            if sl <= price:
+                sl = price + min_distance
+                print(f"⚠️ Adjusted SL for SELL order: {sl:.{digits}f} (was too low)")
+            elif abs(sl - price) < min_distance:
+                sl = price + min_distance
+                print(f"⚠️ Adjusted SL for minimum distance: {sl:.{digits}f}")
+                
+            if tp >= price:
+                tp = price - min_distance
+                print(f"⚠️ Adjusted TP for SELL order: {tp:.{digits}f} (was too high)")
+            elif abs(tp - price) < min_distance:
+                tp = price - min_distance
+                print(f"⚠️ Adjusted TP for minimum distance: {tp:.{digits}f}")
 
-    print(f"🧲 Price: {price:.{digits}f} | SL: {sl:.{digits}f} | TP: {tp:.{digits}f}")
+    logger = get_logger()
+    log_info(f"Price: {price:.{digits}f} | SL: {sl:.{digits}f} | TP: {tp:.{digits}f}", "trade_execution", logger)
 
     # Prepare comment with post-session tag if applicable
     from session_utils import is_post_session
@@ -133,54 +173,54 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_
     # Try to send order with retry logic
     max_retries = 3
     for attempt in range(max_retries):
-        print(f"🔄 Attempting trade execution (attempt {attempt + 1}/{max_retries})...")
+        log_info(f"Attempting trade execution (attempt {attempt + 1}/{max_retries})", "trade_execution", logger)
         
         result = mt5.order_send(request)
         
         if result is not None and hasattr(result, 'retcode'):
             break  # Success, exit retry loop
         
-        print(f"⚠️ Attempt {attempt + 1} failed - no result returned")
+        log_warning(f"Attempt {attempt + 1} failed - no result returned", "trade_execution", logger)
         if attempt < max_retries - 1:
-            print("⏳ Waiting 2 seconds before retry...")
+            log_info("Waiting 2 seconds before retry", "trade_execution", logger)
             time.sleep(2)
     
     if result is None or not hasattr(result, 'retcode'):
-        print(f"❌ Order send failed after {max_retries} attempts. No result returned.")
-        print(f"🔍 Debug: Symbol={resolved_symbol}, Action={action}, Lot={lot}, Price={price}, SL={sl}, TP={tp}")
+        log_error(Exception(f"Order send failed after {max_retries} attempts. No result returned."), "trade_execution", logger)
+        log_info(f"Debug: Symbol={resolved_symbol}, Action={action}, Lot={lot}, Price={price}, SL={sl}, TP={tp}", "trade_execution", logger)
         
         # Additional debugging
-        print(f"🔍 Market Status: {symbol_info.trade_mode}")
-        print(f"🔍 Point: {point}, Digits: {digits}")
-        print(f"🔍 Stop Level: {symbol_info.trade_stops_level}")
-        print(f"🔍 Freeze Level: {symbol_info.trade_freeze_level}")
-        print(f"🔍 MT5 Last Error: {mt5.last_error()}")
+        log_info(f"Market Status: {symbol_info.trade_mode}", "trade_execution", logger)
+        log_info(f"Point: {point}, Digits: {digits}", "trade_execution", logger)
+        log_info(f"Stop Level: {symbol_info.trade_stops_level}", "trade_execution", logger)
+        log_info(f"Freeze Level: {symbol_info.trade_freeze_level}", "trade_execution", logger)
+        log_info(f"MT5 Last Error: {mt5.last_error()}", "trade_execution", logger)
         
         # Check if market is closed
         if symbol_info.trade_mode != mt5.SYMBOL_TRADE_MODE_FULL:
-            print(f"❌ Market is closed for {resolved_symbol}")
+            log_error(Exception(f"Market is closed for {resolved_symbol}"), "trade_execution", logger)
             return False
             
         # Check minimum lot size
         if lot < symbol_info.volume_min:
-            print(f"❌ Lot size {lot} below minimum {symbol_info.volume_min}")
+            log_error(Exception(f"Lot size {lot} below minimum {symbol_info.volume_min}"), "trade_execution", logger)
             return False
             
         # Check if MT5 is still connected
         if not mt5.terminal_info():
-            print("❌ MT5 terminal connection lost")
+            log_error(Exception("MT5 terminal connection lost"), "trade_execution", logger)
             return False
             
         return False
 
     if result.retcode != mt5.TRADE_RETCODE_DONE:
         if result.retcode == 10018:
-            print(f"⚠️ Market closed for {resolved_symbol}. Skipping trade.")
+            log_warning(f"Market closed for {resolved_symbol}. Skipping trade.", "trade_execution", logger)
         else:
-            print(f"❌ Trade failed: {result.retcode} - {getattr(result, 'comment', 'No comment')}")
+            log_error(Exception(f"Trade failed: {result.retcode} - {getattr(result, 'comment', 'No comment')}"), "trade_execution", logger)
         return False
     else:
-        print(f"✅ Trade executed: {action} {resolved_symbol} @ {price:.{digits}f}")
+        log_success(f"Trade executed: {action} {resolved_symbol} @ {price:.{digits}f}", "trade_execution", logger)
 
         # === Send Telegram Signal ===
         try:
@@ -198,9 +238,9 @@ def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_
                 risk_note=risk_note or "No risk note provided"
             )
 
-            print("📤 Signal sent to Telegram.")
+            log_success("Signal sent to Telegram.", "telegram_notification", logger)
         except Exception as e:
-            print(f"⚠️ Failed to send Telegram signal: {e}")
+            log_error(e, "telegram_notification", logger)
 
         return True
 
