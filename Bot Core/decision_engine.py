@@ -9,11 +9,10 @@
 # ⚡ Override logic: If TA score is 5 or 6 and trend aligns, AI is bypassed.
 # 🤝 Hybrid logic: If TA score passes threshold, AI must confirm direction.
 #
-# Also contains dynamic SL/TP logic based on ATR + structure.
+# Also contains pure ATR-based SL/TP logic.
 #
 # ✅ evaluate_trade_decision() – Main trade decision logic
-# ✅ calculate_dynamic_sl_tp() – ATR-based SL/TP calculator
-# ✅ calculate_structural_sl_tp_with_validation() – NEW: Structure-aware SL/TP with RRR validation
+# ✅ calculate_atr_sl_tp() – Pure ATR-based SL/TP calculator (MIGRATED)
 #
 # Used by: bot_runner.py for decision execution
 #
@@ -34,18 +33,24 @@ import re
 import json
 from datetime import datetime
 
-# Import RRR validation system
+# Import new ATR-based SL/TP system
 try:
-    from rrr_validation_repair import validate_and_repair_rrr
+    from atr_sl_tp import calculate_atr_sl_tp
 except ImportError:
-    print("⚠️ Could not import RRR validation system - RRR validation will be disabled")
-    validate_and_repair_rrr = None
+    print("⚠️ Could not import ATR SL/TP system - using fallback")
+    calculate_atr_sl_tp = None
 
-# Import new 0-8 scoring system
+# Import simple scoring system (reverted from sophisticated)
+try:
+    from scoring.score_technical_simple import evaluate_simple_scoring
+except ImportError:
+    print("⚠️ Could not import simple scoring system - falling back to legacy scoring")
+    evaluate_simple_scoring = None
+
+# Keep sophisticated system as backup
 try:
     from scoring.score_technical_v1_8pt import score_technical_v1_8pt, TechContext, TechScoreResult
 except ImportError:
-    print("⚠️ Could not import 0-8 scoring system - falling back to legacy scoring")
     score_technical_v1_8pt = None
     TechContext = None
     TechScoreResult = None
@@ -147,12 +152,68 @@ def evaluate_trade_decision(ta_signals, ai_response_raw):
     AI response must be in structured format: ENTRY_DECISION, CONFIDENCE, etc.
     """
     
-    # === NEW: 0-8 Technical Scoring System ===
-    if USE_8PT_SCORING and score_technical_v1_8pt is not None:
+    # === SIMPLE: Use documented D.E.V.I scoring (more trades) ===
+    if evaluate_simple_scoring is not None:
+        return evaluate_trade_decision_simple(ta_signals, ai_response_raw)
+    
+    # === SOPHISTICATED: Fallback to advanced system if needed ===
+    elif USE_8PT_SCORING and score_technical_v1_8pt is not None:
         return evaluate_trade_decision_8pt(ta_signals, ai_response_raw)
     
-    # === LEGACY: Fallback to old scoring system ===
+    # === LEGACY: Final fallback ===
     return evaluate_trade_decision_legacy(ta_signals, ai_response_raw)
+
+
+def evaluate_trade_decision_simple(ta_signals, ai_response_raw):
+    """
+    SIMPLE: Documented D.E.V.I scoring system (more trades, 65% win rate)
+    """
+    print("📊 Using Simple D.E.V.I Scoring System")
+    
+    # Get simple scoring evaluation
+    scoring_result = evaluate_simple_scoring(ta_signals)
+    
+    technical_score = scoring_result["technical_score"]
+    technical_direction = scoring_result["technical_direction"]
+    components = scoring_result["components"]
+    
+    print(f"📊 Technical Score: {technical_score:.1f} / 8.0")
+    print(f"📊 Components: {components}")
+    print(f"📊 Technical Direction: {technical_direction}")
+    
+    # Check if score passes threshold
+    if not scoring_result["score_passed"]:
+        print(f"⚠️ Technical score {technical_score} below threshold {scoring_result['threshold']}")
+        return "HOLD"
+    
+    # Check EMA alignment if required
+    tech_cfg = CONFIG.get("tech_scoring", {})
+    require_ema_alignment = tech_cfg.get("require_ema_alignment", True)
+    
+    if require_ema_alignment and not scoring_result["ema_aligned"]:
+        print("⚠️ EMA alignment requirement not met")
+        return "HOLD"
+    
+    # Parse AI response for confirmation
+    parsed = parse_ai_response(ai_response_raw)
+    ai_confidence = parsed.get("confidence", 0) if parsed else 0
+    ai_direction = parsed.get("decision", "HOLD") if parsed else "HOLD"
+    
+    # Check AI confirmation requirements
+    min_ai_confidence = tech_cfg.get("ai_min_confidence", 7.0)
+    
+    if ai_confidence < min_ai_confidence:
+        print(f"⚠️ AI confidence {ai_confidence} below required {min_ai_confidence}")
+        return "HOLD"
+    
+    # Check direction alignment
+    if ai_direction != technical_direction:
+        print(f"⚠️ AI direction ({ai_direction}) doesn't match technical ({technical_direction})")
+        return "HOLD"
+    
+    # All checks passed
+    print(f"✅ Simple scoring passed: {technical_score}/8.0, AI: {ai_confidence}, Direction: {technical_direction}")
+    return technical_direction
 
 
 def evaluate_trade_decision_8pt(ta_signals, ai_response_raw):
@@ -573,11 +634,18 @@ def should_override_soft_limit(ta_signals, ai_response_raw, daily_loss, call_ai_
 
 def calculate_dynamic_sl_tp(price, direction, candles_df, rrr=2.0, window=14, buffer_multiplier=0.5):
     """
-    DEPRECATED: Use calculate_structural_sl_tp() instead.
+    DEPRECATED: Use calculate_atr_sl_tp_with_validation() instead.
     Kept for backward compatibility.
     """
-    print("⚠️ DEPRECATED: Using old ATR-based SL/TP calculation. Consider upgrading to structural SL/TP.")
+    print("⚠️ DEPRECATED: Using legacy SL/TP calculation. Migrating to pure ATR system...")
     
+    # Migrate to new ATR-based system
+    if calculate_atr_sl_tp is not None:
+        result = calculate_atr_sl_tp(candles_df, price, direction)
+        if result:
+            return result["sl"], result["tp"]
+    
+    # Fallback if new system unavailable
     if len(candles_df) < window + 1:
         raise ValueError("Not enough candle data to calculate ATR.")
 
@@ -588,22 +656,23 @@ def calculate_dynamic_sl_tp(price, direction, candles_df, rrr=2.0, window=14, bu
         window=window
     )
     atr = atr_series.iloc[-1]
-    buffer = atr * buffer_multiplier
+    sl_distance = atr * CONFIG.get("DEFAULT_SL_MULTIPLIER", 1.5)
+    tp_distance = atr * CONFIG.get("DEFAULT_TP_MULTIPLIER", 2.5)
 
     if direction == "BUY":
-        sl = candles_df['low'].tail(10).min() - buffer
-        tp = price + (price - sl) * rrr
+        sl = price - sl_distance
+        tp = price + tp_distance
     elif direction == "SELL":
-        sl = candles_df['high'].tail(10).max() + buffer
-        tp = price - (sl - price) * rrr
+        sl = price + sl_distance
+        tp = price - tp_distance
     else:
         raise ValueError("Invalid direction: must be 'BUY' or 'SELL'.")
 
     return round(sl, 5), round(tp, 5)
 
-def calculate_structural_sl_tp_with_validation(candles_df, entry_price, direction, session_time=None, technical_score=0, symbol=None):
+def calculate_atr_sl_tp_with_validation(candles_df, entry_price, direction, session_time=None, technical_score=0, symbol=None):
     """
-    Calculate structure-aware SL/TP with RRR validation and logging.
+    Calculate pure ATR-based SL/TP with validation and logging.
     
     Returns:
         dict: SL, TP, RRR validation result, and calculation details
@@ -611,11 +680,56 @@ def calculate_structural_sl_tp_with_validation(candles_df, entry_price, directio
     import json
     
     try:
-                # Use structural SL/TP system with RRR validation
-        from calculate_structural_sl_tp import calculate_structural_sl_tp
+        # Use pure ATR-based SL/TP system
+        if calculate_atr_sl_tp is None:
+            raise ImportError("ATR SL/TP system not available")
         
-        # Calculate structural SL/TP
-        result = calculate_structural_sl_tp(candles_df, entry_price, direction, session_time, symbol)
+        # Calculate ATR-based SL/TP
+        result = calculate_atr_sl_tp(candles_df, entry_price, direction, symbol)
+        
+        # ✅ PHASE 1: Apply broker validation to prevent "Invalid stops" errors
+        try:
+            from config import SL_TP_CONFIG
+            from broker_validation import enforce_broker_min_stops
+            
+            if SL_TP_CONFIG.get("enable_broker_validation", True) and symbol:
+                original_sl = result["sl"]
+                original_tp = result["tp"]
+                
+                # Apply broker validation
+                validated_sl, validated_tp, validation_log = enforce_broker_min_stops(
+                    original_sl, original_tp, entry_price, symbol
+                )
+                
+                # Update result with validated values
+                result["sl"] = validated_sl
+                result["tp"] = validated_tp
+                result["broker_validation"] = validation_log
+                
+                # Update expected RRR with validated levels
+                if direction.upper() == "BUY":
+                    sl_distance = entry_price - validated_sl
+                    tp_distance = validated_tp - entry_price
+                elif direction.upper() == "SELL":
+                    sl_distance = validated_sl - entry_price
+                    tp_distance = entry_price - validated_tp
+                else:
+                    sl_distance = tp_distance = 0
+                
+                if sl_distance > 0:
+                    result["expected_rrr"] = tp_distance / sl_distance
+                else:
+                    result["expected_rrr"] = 0
+                    
+                # Log if adjustments were made
+                if validation_log.get("adjusted_for_broker_min_stop", False):
+                    print(f"🛡️ Broker validation applied - SL: {original_sl:.5f} → {validated_sl:.5f}, TP: {original_tp:.5f} → {validated_tp:.5f}")
+            else:
+                result["broker_validation"] = {"enabled": False, "reason": "validation_disabled_or_no_symbol"}
+                
+        except Exception as e:
+            print(f"⚠️ Broker validation failed, using original SL/TP: {e}")
+            result["broker_validation"] = {"error": str(e), "fallback_used": True}
         
         # Structural validation (no hardcoded RRR filters)
         sl = result["sl"]
@@ -639,35 +753,8 @@ def calculate_structural_sl_tp_with_validation(candles_df, entry_price, directio
         
         result["rrr_passed"] = rrr_passed
         
-        # 🛡️ NEW: RRR Validation & Repair for legacy system
-        if rrr_passed and validate_and_repair_rrr is not None:
-            # Validate and repair RRR
-            rrr_result = validate_and_repair_rrr(
-                entry_price=entry_price,
-                sl_price=result["sl"],
-                tp_price=result["tp"],
-                direction=direction,
-                atr_value=result["atr"],
-                symbol=symbol,
-                structural_targets=None,  # Legacy system doesn't provide these
-                structural_stops=None
-            )
-            
-            if rrr_result is None:
-                # RRR validation failed
-                result["rrr_passed"] = False
-                result["rrr_reason"] = "RRR validation failed - trade canceled"
-                result["expected_rrr"] = 0.0
-            else:
-                # RRR validation passed - use repaired values
-                final_sl, final_tp, final_rrr = rrr_result
-                result["sl"] = final_sl
-                result["tp"] = final_tp
-                result["expected_rrr"] = final_rrr
-                result["rrr_reason"] = f"RRR validation passed - {final_rrr:.3f}"
-        elif rrr_passed and validate_and_repair_rrr is None:
-            # RRR validation system not available - skip validation
-            result["rrr_reason"] = f"RRR validation skipped - system not available, RRR: {expected_rrr:.3f}"
+        # No additional validation needed for pure ATR system
+        # ATR-based calculations are deterministic and validated during calculation
         
         mapped_result = result
         
@@ -689,7 +776,8 @@ def calculate_structural_sl_tp_with_validation(candles_df, entry_price, directio
             "atr_multiplier": result.get("atr_multiplier", "N/A"),
             "htf_validation_score": result.get("htf_validation_score", "N/A"),
             "tp_split_enabled": result.get("tp_split", {}).get("enabled", False),
-            "system": "legacy_structural"
+            "system": "pure_atr",
+            "broker_validation": result.get("broker_validation", {"enabled": False})
         }
         
         # Append to AI decision log
@@ -712,7 +800,7 @@ def calculate_structural_sl_tp_with_validation(candles_df, entry_price, directio
         return mapped_result
         
     except Exception as e:
-        print(f"❌ Error in structural SL/TP calculation: {e}")
+        print(f"❌ Error in ATR SL/TP calculation: {e}")
         
         # Emergency fallback using config values instead of ATR
         config_sl_pips = CONFIG.get("sl_pips", 50)

@@ -28,11 +28,11 @@ FTMO_PARAMS = {
 
 CONFIG = {
     # ✅ Core Trading Parameters
-    "sl_pips": 50,               # Fallback SL distance
-    "tp_pips": 100,              # Fallback TP distance
+    "sl_pips": 38,            # Fallback SL distance
+    "tp_pips": 76,           # Fallback TP distance
     "delay_seconds": 60 * 15,    # 15-minute loop
     # min_score_for_trade moved to tech_scoring section for consolidation
-    "lot_size": 1.25,            # Default lot size (legacy compatibility)
+    "lot_size": 1.25,            # Keep for backward compatibility (same as default_lot_size)
     
     # ✅ Lot Size Configuration
     "default_lot_size": 1.25,    # Default trade volume
@@ -60,14 +60,7 @@ CONFIG = {
         "D1": 0.002
     },
 
-    # ✅ D.E.V.I Equity Cycle Management
-    "equity_cycle": {
-        "stage_1_threshold": 1.0,   # +1.0% - Close 50% + Breakeven
-        "stage_2_threshold": 1.5,   # +1.5% - Close all + Reset
-        "stage_3_threshold": 2.0,   # +2.0% - Pause trades
-        "breakeven_buffer_pips": 5, # Breakeven buffer
-        "enable_logging": True      # Log all cycle triggers
-    },
+    # ✅ D.E.V.I Equity Cycle Management - moved to PROTECTION_CONFIG
 
     # ✅ Session Management
     "session_hours": {
@@ -83,19 +76,17 @@ CONFIG = {
     "min_score_off_hours": 7.0,
     "max_lot_size_off_hours": 0.5,
 
-    # ✅ Risk Management
-    "drawdown_limit_percent": -0.5,  # Changed from -1.0 to -0.5 for D.E.V.I
-    "cooldown_minutes_after_recovery": 15,
-    "global_profit_lock_cooldown_minutes": 0,
-    "max_consecutive_losses": 3,
-    "cooldown_after_losses_minutes": 60,
+    # ✅ Risk Management - SIMPLIFIED (most moved to PROTECTION_CONFIG)
+    # Legacy risk parameters (may be unused):
+    "max_consecutive_losses": 3,               # Consider removing if unused
+    "cooldown_after_losses_minutes": 60,       # Consider removing if unused
 
     # ✅ USD Trading Control
     "usd_related_keywords": ["USD", "US500", "US30", "NAS100", "NVDA", "TSLA"],
-    "restrict_usd_to_am": True,
+    "restrict_usd_to_am": False,
     "allowed_trading_window": {
-        "start_hour": 13,#ondon session
-        "end_hour": 16, 
+        "start_hour": 0, #ondon session
+        "end_hour": 24, 
     },
 
     # ✅ News Protection
@@ -104,87 +95,67 @@ CONFIG = {
     "news_refresh_interval_hours": 24,
     "auto_disable_on_no_news": True,  # Automatically disable protection when no events
 
-    # ✅ Post-Session Trading
-    "post_session": {
-        "enabled": True,
-        "score_threshold": 8.0,           # Must be 8.0 for post-session
-        "min_ai_confidence": 8,           # Increased for post-session safety
-        "lot_multiplier": 0.75,           # Reduced for post-session safety
-        "trailing_stop_after_profit_minutes": 30,
-        "soft_extension_cutoff_utc": "20:00",
-        "enable_reentry": True,
-        "max_reentries_per_symbol": 1,
-        "partial_close_percent": 0.5,     # Faster profit taking
-        "full_close_percent": 1.0,        # Faster profit taking
-        "extension_min_pnl": 0.5,         # Lower threshold for extension
-        "max_extension_minutes": 45,      # More time for profit development
-    },
+    # ✅ Post-Session Trading - REMOVED (Complex logic replaced by protection system)
+    # Session management now handled by PROTECTION_CONFIG.session_end_utc
     
-    # ✅ SL/TP System (Consolidated)
-    "sltp_system": {
-        # RRR Validation
-        "min_rrr": 1.50,
-        "max_sl_atr": 2.5,
-        "min_tp_pips": 15,
-        "max_tp_pips": 500,
-        "allow_atr_fallback": True,
-        "enable_repair": True,
-        "log_repairs": True,
-        
-        # Adaptive ATR
-        "enable_adaptive_atr": True,
-        "adaptive_atr": {
-            "low_vol_percentile": 0.3,
-            "high_vol_percentile": 0.7,
-            "mult_low": 1.2,
-            "mult_mid": 1.5,
-            "mult_high": 1.8,
-            "lookback": 90
-        },
-        
-        # HTF Validation
-        "enable_htf_validation": True,
-        "htf_timeframe": "H1",
-        "htf_min_score": 0.6,
-        
-        # TP Split (DISABLED for D.E.V.I equity cycle system)
-        "enable_tp_split": False,
-        "tp_split": {
-            "tp1_ratio": 1.0,           # 1:1
-            "tp1_size": 0.30,           
-            "tp2_ratio": 2.0,           # 2:1
-            "tp2_size": 0.70,
-            "breakeven_buffer_pips": 5
-        },
-        
-        # Structure-Aware Features
-        "enable_distance_filters": True,
-        "enable_rrr_lot_sizing": False,
-        "enable_detailed_logging": True,
-        
-        # RRR-Based Lot Sizing
-        "lot_multipliers": {
-            "high": 1.0,      # RRR >= 2.0
-            "moderate": 0.75,  # RRR 1.5-1.99
-            "low": 0.5,       # RRR 1.0-1.49
-            "very_low": 0.25  # RRR < 1.0
-        }
-    },
+    # ✅ SL/TP System - REMOVED (Obsolete structure-aware system)
+    # Old sltp_system replaced by simple ATR parameters + PROTECTION_CONFIG
     
     # ✅ Technical Scoring System
     "tech_scoring": {
         "scale": "0_to_8",
-        "min_score_for_trade": 6.5, # Added: Use 6.0 as requested
-        "post_session_threshold": 6.5,
-        "pm_usd_asset_min_score": 6.0,
+        "min_score_for_trade": 6.0, # Adjusted for simple scoring system
+        "post_session_threshold": 6.0,
+        "pm_usd_asset_min_score": 7.0,
         "require_ema_alignment": True,
         "ai_min_confidence": 7.0,
         "ai_override_enabled": True
     },
     
+    # ✅ ATR-Based SL/TP System - MOVED to PROTECTION_CONFIG
+    # These parameters moved to PROTECTION_CONFIG for consolidation
+    "DEFAULT_SL_MULTIPLIER": 1.5,    # ATR multiplier for Stop Loss (legacy compatibility)
+    "DEFAULT_TP_MULTIPLIER": 2.5,    # ATR multiplier for Take Profit (legacy compatibility)
+    "ATR_PERIOD": 14,                # ATR calculation period (legacy compatibility)
+    "MIN_RRR": 1.2,                  # Minimum Risk:Reward ratio (legacy compatibility)
+    
     # ✅ System Features
     "disable_telegram": False,  # Disabled for now
 }
 
+# ✅ D.E.V.I Profit Protection System Configuration
+PROTECTION_CONFIG = {
+    # Equity Protection Thresholds
+    "equity_partial_pct": 1.00,           # +1% → Partial close + Breakeven
+    "equity_full_pct": 2.00,              # +2% → Full close (after partial)
+    "drawdown_block_pct": -0.50,          # -0.5% → Block new trades
+    "unblock_threshold_pct": 0.00,        # 0% → Unblock trades
+    
+    # Trailing Stop Configuration
+    "trailing_activate_seconds": 1800,     # 30 minutes = 1800 seconds
+    "trail_use_atr": True,                 # Use ATR-based trailing
+    "trail_atr_period": 14,                # ATR calculation period
+    "trail_atr_mult": 1.0,                 # ATR multiplier for trailing distance
+    "trail_fixed_pips": 15,                # Fixed pip distance (fallback)
+    
+    # Breakeven Configuration
+    "breakeven_tick_safety": 1,            # Ticks of safety buffer
+    "apply_to_profitable_only": True,      # Only apply to profitable trades
+    
+    # Session Management
+    "session_end_utc": "16:00",            # Session end time (UTC)
+    "cycle_epsilon_pct": 0.10,             # ±0.1% tolerance for cycle reset
+}
+
+# === SL/TP System Configuration ===
+SL_TP_CONFIG = {
+    "min_stop_buffer_ticks": 2,         # Safety buffer beyond broker minimum
+    "prefer_structure": False,          # Future: structure-aware SL/TP (Phase 2)
+    "max_sl_pips": 70,                  # Maximum SL distance (safety cap)
+    "fallback_sl_pips": 25,             # Emergency fallback SL
+    "fallback_tp_pips": 50,             # Emergency fallback TP
+    "enable_broker_validation": True,   # Enforce broker minimum stops
+}
+
 # ✅ Feature flag for 0-8 scoring system
-USE_8PT_SCORING = True
+USE_8PT_SCORING = False  # Use simple scoring system

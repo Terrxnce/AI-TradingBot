@@ -28,7 +28,7 @@ from strategy_engine import analyze_structure
 from decision_engine import (
     evaluate_trade_decision, 
     calculate_dynamic_sl_tp, 
-    calculate_structural_sl_tp_with_validation, 
+    calculate_atr_sl_tp_with_validation, 
     build_ai_prompt
 )
 from broker_interface import initialize_mt5, shutdown_mt5, place_trade
@@ -38,14 +38,18 @@ import config
 from shared.settings import get_user_paths
 from shared.time_align import next_boundary_utc, sleep_until, now_utc
 
-# Trading modules
-from trailing_stop import apply_trailing_stop
-from position_manager import close_trades_at_4pm
+# Trading modules (updated for new profit protection system)
+# from trailing_stop import apply_trailing_stop  # Replaced by profit_protection_manager
+# from position_manager import close_trades_at_4pm  # Replaced by profit_protection_manager
 from risk_guard import can_trade
 from trade_logger import log_trade
 from session_utils import detect_session
 from news_guard import get_macro_sentiment, should_block_trading
-from equity_cycle_manager import check_equity_cycle, is_trades_paused
+# from equity_cycle_manager import check_equity_cycle, is_trades_paused  # REMOVED - replaced by profit_protection_manager
+
+# New unified profit protection system
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from profit_protection_manager import run_protection_cycle, mark_new_trade_opened, is_drawdown_blocked, get_protection_status
 
 # Error handling and monitoring
 from error_handler import safe_mt5_operation, validate_trade_parameters, performance_monitor
@@ -269,6 +273,27 @@ def run_bot():
             current_config = get_current_config()
             DELAY_SECONDS = current_config.get("delay_seconds", 60 * 15)
             
+            # ✅ Run D.E.V.I Profit Protection Cycle (at start of loop)
+            try:
+                candles_data = {}  # Will collect candle data for ATR calculations
+                protection_result = run_protection_cycle(None)  # First call without candles
+                
+                if protection_result and protection_result.get("action") == "block_trades":
+                    print(f"🛡️ Trading blocked by profit protection: {protection_result.get('reason')}")
+                    protection_status = get_protection_status()
+                    print(f"📊 Protection Status: Equity {protection_status['floating_equity_pct']:.2f}% | "
+                          f"Partial: {protection_status['partial_done']} | "
+                          f"Full: {protection_status['full_done']} | "
+                          f"Blocked: {protection_status['blocked_for_drawdown']}")
+                    
+                    # Skip trading but continue monitoring
+                    # apply_trailing_stop() - now handled by protection cycle
+                    time.sleep(60)  # Shorter sleep for protection monitoring
+                    continue
+                
+            except Exception as e:
+                print(f"⚠️ Protection cycle error: {e}")
+            
             # Enhanced connection check with error handling
             if not safe_mt5_operation(lambda: mt5.terminal_info() and mt5.version()):
                 print("⚠️ MT5 appears disconnected. Reinitializing with error handling...")
@@ -285,7 +310,7 @@ def run_bot():
                 trade_counter[sym] = [t for t in trade_counter[sym] if (now - t).total_seconds() < 3600]
 
             # Check for 4PM close trades
-            close_trades_at_4pm()
+            # close_trades_at_4pm() - now handled by protection cycle session reset
             
             # Check for post-session management
             from post_session_manager import (
@@ -347,9 +372,10 @@ def run_bot():
                         f.write(json.dumps(log_entry) + "\n")
                     continue
 
-                # Check D.E.V.I equity cycle management
-                check_equity_cycle()
-
+                # Check D.E.V.I equity cycle management - NOW HANDLED BY PROTECTION CYCLE
+                # check_equity_cycle()  # REMOVED - replaced by profit_protection_manager
+                
+                # USD time restriction check
                 if current_config.get("restrict_usd_to_am", False):
                     keywords = current_config.get("usd_related_keywords", [])
                     if any(k in symbol.upper() for k in keywords):
@@ -406,6 +432,9 @@ def run_bot():
 
                 ta_signals = {**ta_m15, "h1_trend": ta_h1["ema_trend"], "session": session}
                 ta_signals["symbol"] = symbol
+                
+                # ✅ Store candle data for profit protection ATR calculations
+                candles_data[symbol] = candles_m15
 
                 print("🕒 Current Session:", session)
                 print("🔍 TA Signals:", ta_signals)
@@ -469,9 +498,9 @@ def run_bot():
                         f.write(json.dumps(log_entry) + "\n")
                     continue
 
-                # Check if trades are paused due to +2% equity cycle trigger
-                if is_trades_paused():
-                    print(f"⏸️ Skipped {symbol} — trades paused due to +2% equity cycle trigger.")
+                # Check if trades are paused due to protection system
+                if is_drawdown_blocked():
+                    print(f"⏸️ Skipped {symbol} — trades blocked by profit protection system.")
                     # Log missed trade reason
                     log_entry = {
                         "timestamp": datetime.now().isoformat(),
@@ -486,7 +515,7 @@ def run_bot():
                         "executed": False,
                         "ai_override": False,
                         "override_reason": "Equity cycle pause",
-                        "execution_source": "equity_cycle_pause"
+                        "execution_source": "protection_system_pause"
                     }
                     with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
                         f.write(json.dumps(log_entry) + "\n")
@@ -553,9 +582,9 @@ def run_bot():
 
                         price = candles_m15.iloc[-1]["close"]
                         
-                        # 🧱 NEW: Use structural SL/TP system with RRR validation
-                        print("🧱 Calculating structural SL/TP with market structure analysis...")
-                        sl_tp_result = calculate_structural_sl_tp_with_validation(
+                        # 📊 NEW: Use pure ATR-based SL/TP system
+                        print("📊 Calculating ATR-based SL/TP...")
+                        sl_tp_result = calculate_atr_sl_tp_with_validation(
                             candles_df=candles_m15,
                             entry_price=price,
                             direction=final_direction,
@@ -564,51 +593,25 @@ def run_bot():
                             symbol=symbol
                         )
                         
-                        # 🛡️ RRR Validation - Block trades with insufficient risk-reward
+                        # 🛡️ ATR Validation - Block trades with insufficient risk-reward
                         if not sl_tp_result["rrr_passed"]:
-                            print(f"❌ Trade BLOCKED by RRR validation: {sl_tp_result['rrr_reason']}")
+                            print(f"❌ Trade BLOCKED by ATR validation: {sl_tp_result['rrr_reason']}")
                             print(f"📊 Calculated RRR: {sl_tp_result['expected_rrr']:.3f}")
-                            print(f"🔍 SL Source: {sl_tp_result['sl_from']} | TP Source: {sl_tp_result['tp_from']}")
+                            print(f"🔍 SL: ATR × {sl_tp_result.get('sl_multiplier', 'N/A')} | TP: ATR × {sl_tp_result.get('tp_multiplier', 'N/A')}")
                             continue  # Skip this trade completely
                         
                         # Extract validated SL/TP
                         sl = sl_tp_result["sl"]
                         tp = sl_tp_result["tp"]
                         
-                        # 🧱 NEW: Use adaptive lot size from structure-aware system if available
-                        if sl_tp_result.get("lot_size") is not None:
-                            # Use the adaptive lot size from the structure-aware system
-                            adaptive_lot = sl_tp_result["lot_size"]
-                            
-                            # Validate lot size against broker requirements
-                            if adaptive_lot >= 0.01 and adaptive_lot <= 100.0:
-                                # Round to valid broker lot size increments
-                                if adaptive_lot < 0.1:
-                                    lot = round(adaptive_lot, 2)  # 0.01, 0.02, 0.05, etc.
-                                elif adaptive_lot < 1.0:
-                                    lot = round(adaptive_lot, 1)  # 0.1, 0.2, 0.5, etc.
-                                else:
-                                    lot = round(adaptive_lot)  # 1.0, 2.0, etc.
-                                
-                                # Ensure minimum valid lot size
-                                if lot < 0.01:
-                                    lot = 0.01
-                                
-                                print(f"🧱 Using adaptive lot size from structure-aware system: {lot}")
-                            else:
-                                # Fallback to config-based lot sizing if adaptive lot is invalid
-                                lot_sizes = {k.upper(): v for k, v in current_config.get("lot_sizes", {}).items()}
-                                lot = lot_sizes.get(symbol_key, current_config.get("default_lot_size", 0.1))
-                                print(f"🧱 Adaptive lot size {adaptive_lot} invalid, using config-based: {lot}")
-                        else:
-                            # Fallback to config-based lot sizing
-                            lot_sizes = {k.upper(): v for k, v in current_config.get("lot_sizes", {}).items()}
-                            lot = lot_sizes.get(symbol_key, current_config.get("default_lot_size", 0.1))
-                            print(f"🧱 Using config-based lot size: {lot}")
+                        # Use standard config-based lot sizing (no structure-aware adaptive sizing)
+                        lot_sizes = {k.upper(): v for k, v in current_config.get("lot_sizes", {}).items()}
+                        lot = lot_sizes.get(symbol_key, current_config.get("default_lot_size", 0.1))
+                        print(f"📊 Using config-based lot size: {lot}")
 
                         print(f"🧶 Resolved lot size for {symbol}: {lot}")
-                        print(f"🧱 Structural SL: {sl} ({sl_tp_result['sl_from']}) | TP: {tp} ({sl_tp_result['tp_from']})")
-                        print(f"⚖️ Expected RRR: {sl_tp_result['expected_rrr']:.3f} | Session: {sl_tp_result['session_adjustment']}")
+                        print(f"📊 ATR-based SL: {sl} ({sl_tp_result['sl_from']}) | TP: {tp} ({sl_tp_result['tp_from']})")
+                        print(f"⚖️ Expected RRR: {sl_tp_result['expected_rrr']:.3f} | ATR: {sl_tp_result['atr']:.5f}")
                         # Map new structure format to display format
                         structures = sl_tp_result['structures_found']
                         ob_count = structures.get('order_blocks', 0)
@@ -638,6 +641,13 @@ def run_bot():
                         if success:
                             log_trade(symbol, final_direction, lot, sl, tp, price, result="EXECUTED")
                             trade_counter[symbol_key].append(now)
+                            
+                            # ✅ Mark new trade for profit protection tracking
+                            try:
+                                mark_new_trade_opened()
+                                print("📈 Trade marked for profit protection tracking")
+                            except Exception as e:
+                                print(f"⚠️ Failed to mark trade for protection: {e}")
 
                     except Exception as err:
                         print(f"❌ SL/TP or lot sizing error: {err}")
@@ -675,8 +685,8 @@ def run_bot():
                     "ai_override": str(final_direction != ai_direction),  # Convert bool to string
                     "override_reason": override_reason,
                     "execution_source": execution_source,
-                    # 🧱 NEW: Structural SL/TP details
-                    "structural_sl_tp": {
+                    # 🧱 NEW: ATR-based SL/TP details with broker validation
+                    "atr_sl_tp": {
                         "sl": sl_tp_result.get("sl"),
                         "tp": sl_tp_result.get("tp"),
                         "expected_rrr": sl_tp_result.get("expected_rrr"),
@@ -689,15 +699,23 @@ def run_bot():
                         "atr": sl_tp_result.get("atr"),
                         "lot_size": sl_tp_result.get("lot_size"),
                         "confidence": sl_tp_result.get("confidence"),
-                        "fallback_used": sl_tp_result.get("fallback_used")
+                        "fallback_used": sl_tp_result.get("fallback_used"),
+                        "broker_validation": sl_tp_result.get("broker_validation", {"enabled": False})
                     } if sl_tp_result is not None else None
                 }
 
                 with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
                     f.write(json.dumps(log_entry) + "\n")
 
-            apply_trailing_stop(minutes=30, trail_pips=20)
+            # apply_trailing_stop(minutes=30, trail_pips=20) - now handled by protection cycle
             # Old partial close system removed - now handled by equity cycle manager
+            
+            # ✅ Run second protection cycle with collected candle data for ATR trailing
+            try:
+                if candles_data:  # If we collected any candle data
+                    run_protection_cycle(candles_data)
+            except Exception as e:
+                print(f"⚠️ Protection cycle with candles error: {e}")
             
             # Update heartbeat for GUI status monitoring (ALWAYS update, even if no trades)
             try:

@@ -157,39 +157,9 @@ def set_loss_block_state(active):
         print(f"❌ Error saving loss block state: {e}")
 
 
-def check_pnl_drawdown_block():
-    """
-    Check if trading should be blocked due to -0.5% unrealized PnL drawdown.
-    Returns True if trading should be blocked, False if allowed.
-    """
-    balance = get_balance()
-    floating_pnl = get_floating_pnl()
-    threshold_percent = CONFIG.get("drawdown_limit_percent", -1.0)
-    pnl_threshold = (threshold_percent / 100) * balance
-
-    print(f"🔒 [RISK CHECK] Balance: {balance:.2f} | Floating PnL: {floating_pnl:.2f} | Threshold: {pnl_threshold:.2f}")
-
-    
-    block_active = load_loss_block_state()
-    
-    # If we're currently in block mode
-    if block_active:
-        if floating_pnl >= 0:  # Changed from > 0 to >= 0 to include $0.00
-            print("✅ Recovery detected: Floating PnL >= 0. Resuming trades.")
-            set_loss_block_state(False)
-            return False  # Allow trading
-        else:
-            print(f"🧊 Trade frozen — still recovering from drawdown. Current PnL: ${floating_pnl:.2f}")
-            return True  # Block trading
-    
-    # If we're not in block mode, check if we should enter it
-    if floating_pnl <= pnl_threshold:
-        print(f"🚫 Unrealized PnL below -0.5% threshold: ${floating_pnl:.2f} < ${pnl_threshold:.2f}")
-        print("🚫 Entered drawdown block mode - no new trades until recovery.")
-        set_loss_block_state(True)
-        return True  # Block trading
-    
-    return False  # Allow trading
+# def check_pnl_drawdown_block(): - REMOVED
+# This function has been replaced by the unified profit_protection_manager.py
+# which handles -0.5% drawdown blocking with better state management
 
 
 def extract_technical_score_8pt(ta_signals):
@@ -286,28 +256,26 @@ def get_trade_block_reason(ta_signals=None, ai_response_raw=None, call_ai_func=N
     print(f"🔒 [RISK CHECK] Closed PnL: {closed_today:.2f} | Floating: {floating:.2f} | Daily Loss: {daily_loss:.2f}")
     print(f"🔒 [RISK CHECK] Equity: {equity:.2f} | Total Loss: {total_loss:.2f} | Balance: {balance:.2f}")
 
-    # Check for -0.5% PnL drawdown block
-    if check_pnl_drawdown_block():
-        return False, "Floating PnL Drawdown", f"Below -0.5% threshold: ${floating:.2f}"
+    # Check for -0.5% PnL drawdown block - NOW HANDLED BY PROTECTION SYSTEM
+    # if check_pnl_drawdown_block(): - REMOVED, handled by profit_protection_manager
 
     # Check for technical score cooldown
     from config import CONFIG, USE_8PT_SCORING
     
     # Get the actual technical score and threshold
+    tech_cfg = CONFIG.get("tech_scoring", {})
+    min_score = tech_cfg.get("min_score_for_trade", 6.5)
+    
     if USE_8PT_SCORING and ta_signals:
         # Extract the real 8-point score
         actual_score = extract_technical_score_8pt(ta_signals)
         if actual_score is None:
             actual_score = tech_score  # Fallback
-        tech_cfg = CONFIG.get("tech_scoring", {})
-        min_score = tech_cfg.get("min_score_for_trade", 6.5)
         max_score = 8.0
     else:
-        # Legacy system uses simple scoring
-        tech_cfg = CONFIG.get("tech_scoring", {})
-        min_score = tech_cfg.get("min_score_for_trade", 6.0)
+        # Simple scoring system uses the passed tech_score
         actual_score = tech_score
-        max_score = 10.0
+        max_score = 8.0  # Simple scoring also uses 8.0 scale
     
     if is_pnl_cooldown_active(actual_score):
         return False, "Low Technical Score", f"Score {actual_score:.1f}/{max_score} < required {min_score}/{max_score}"
