@@ -281,3 +281,15 @@
 2025-08-20 23:39:06,868 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
 2025-08-20 23:39:07,061 - INFO - ✅ Success in trade_execution: Trade executed: SELL AUDJPY @ 94.770
 2025-08-20 23:39:07,278 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-20 23:46:54,140 - INFO - ℹ️ Info in trade_execution: Price: 94.774 | SL: 94.857 | TP: 94.625
+2025-08-20 23:46:54,141 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-20 23:46:54,313 - INFO - ✅ Success in trade_execution: Trade executed: SELL AUDJPY @ 94.774
+2025-08-20 23:46:54,439 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-20 23:47:31,305 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-20 23:50:40,560 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-20 23:52:58,898 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-20 23:53:32,283 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-20 23:56:02,214 - INFO - ℹ️ Info in trade_execution: Price: 94.796 | SL: 94.880 | TP: 94.642
+2025-08-20 23:56:02,214 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-20 23:56:02,391 - INFO - ✅ Success in trade_execution: Trade executed: SELL AUDJPY @ 94.796
+2025-08-20 23:56:02,531 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.

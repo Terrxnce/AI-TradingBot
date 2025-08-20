@@ -684,14 +684,40 @@ def calculate_atr_sl_tp_with_validation(candles_df, entry_price, direction, sess
         if calculate_atr_sl_tp is None:
             raise ImportError("ATR SL/TP system not available")
         
-        # Calculate ATR-based SL/TP
-        result = calculate_atr_sl_tp(candles_df, entry_price, direction, symbol)
-        
-        # ✅ PHASE 1: Apply broker validation to prevent "Invalid stops" errors
+        # ✅ PHASE 2: Structure-Aware SL/TP with ATR Fallback
         try:
             from config import SL_TP_CONFIG
             from broker_validation import enforce_broker_min_stops
+            from structure_sl_tp import calculate_structure_sl_tp
             
+            # Check if structure-aware SL/TP is enabled
+            if SL_TP_CONFIG.get("prefer_structure", True):
+                # Try structure-aware SL/TP first
+                structure_result = calculate_structure_sl_tp(
+                    entry_price, direction, 
+                    {"order_blocks": [], "fvg": []},  # Will be populated from analysis
+                    symbol
+                )
+                
+                if structure_result:
+                    # Use structure-based SL/TP
+                    result = structure_result
+                    print(f"🏗️ Using structure-aware SL/TP: SL {result['sl']:.5f} ({result['sl_source']}), TP {result['tp']:.5f} ({result['tp_source']})")
+                else:
+                    # Fallback to ATR-based SL/TP
+                    result = calculate_atr_sl_tp(candles_df, entry_price, direction, symbol)
+                    result["sl_source"] = "atr"
+                    result["tp_source"] = "atr"
+                    result["fallback_used"] = True
+                    print(f"📊 Using ATR fallback SL/TP: SL {result['sl']:.5f}, TP {result['tp']:.5f}")
+            else:
+                # Use ATR-based SL/TP only
+                result = calculate_atr_sl_tp(candles_df, entry_price, direction, symbol)
+                result["sl_source"] = "atr"
+                result["tp_source"] = "atr"
+                result["fallback_used"] = False
+            
+            # ✅ Apply broker validation to final SL/TP
             if SL_TP_CONFIG.get("enable_broker_validation", True) and symbol:
                 original_sl = result["sl"]
                 original_tp = result["tp"]
@@ -728,8 +754,12 @@ def calculate_atr_sl_tp_with_validation(candles_df, entry_price, direction, sess
                 result["broker_validation"] = {"enabled": False, "reason": "validation_disabled_or_no_symbol"}
                 
         except Exception as e:
-            print(f"⚠️ Broker validation failed, using original SL/TP: {e}")
+            print(f"⚠️ Structure/ATR calculation failed, using emergency fallback: {e}")
+            # Emergency fallback
+            result = calculate_atr_sl_tp(candles_df, entry_price, direction, symbol)
             result["broker_validation"] = {"error": str(e), "fallback_used": True}
+            result["sl_source"] = "emergency_fallback"
+            result["tp_source"] = "emergency_fallback"
         
         # Structural validation (no hardcoded RRR filters)
         sl = result["sl"]
@@ -776,8 +806,16 @@ def calculate_atr_sl_tp_with_validation(candles_df, entry_price, direction, sess
             "atr_multiplier": result.get("atr_multiplier", "N/A"),
             "htf_validation_score": result.get("htf_validation_score", "N/A"),
             "tp_split_enabled": result.get("tp_split", {}).get("enabled", False),
-            "system": "pure_atr",
-            "broker_validation": result.get("broker_validation", {"enabled": False})
+            "system": result.get("system", "pure_atr"),
+            "broker_validation": result.get("broker_validation", {"enabled": False}),
+            "sl_source": result.get("sl_source", "atr"),
+            "tp_source": result.get("tp_source", "atr"),
+            "structure_sl_type": result.get("structure_sl_type", "N/A"),
+            "structure_tp_type": result.get("structure_tp_type", "N/A"),
+            "structure_sl_level": result.get("structure_sl_level", "N/A"),
+            "structure_tp_level": result.get("structure_tp_level", "N/A"),
+            "sl_buffer_applied": result.get("sl_buffer_applied", "N/A"),
+            "fallback_used": result.get("fallback_used", False)
         }
         
         # Append to AI decision log

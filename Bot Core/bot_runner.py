@@ -685,8 +685,8 @@ def run_bot():
                     "ai_override": str(final_direction != ai_direction),  # Convert bool to string
                     "override_reason": override_reason,
                     "execution_source": execution_source,
-                    # 🧱 NEW: ATR-based SL/TP details with broker validation
-                    "atr_sl_tp": {
+                    # 🧱 NEW: Structure-Aware SL/TP details with broker validation
+                    "sl_tp_details": {
                         "sl": sl_tp_result.get("sl"),
                         "tp": sl_tp_result.get("tp"),
                         "expected_rrr": sl_tp_result.get("expected_rrr"),
@@ -700,7 +700,15 @@ def run_bot():
                         "lot_size": sl_tp_result.get("lot_size"),
                         "confidence": sl_tp_result.get("confidence"),
                         "fallback_used": sl_tp_result.get("fallback_used"),
-                        "broker_validation": sl_tp_result.get("broker_validation", {"enabled": False})
+                        "broker_validation": sl_tp_result.get("broker_validation", {"enabled": False}),
+                        "sl_source": sl_tp_result.get("sl_source", "atr"),
+                        "tp_source": sl_tp_result.get("tp_source", "atr"),
+                        "structure_sl_type": sl_tp_result.get("structure_sl_type", "N/A"),
+                        "structure_tp_type": sl_tp_result.get("structure_tp_type", "N/A"),
+                        "structure_sl_level": sl_tp_result.get("structure_sl_level", "N/A"),
+                        "structure_tp_level": sl_tp_result.get("structure_tp_level", "N/A"),
+                        "sl_buffer_applied": sl_tp_result.get("sl_buffer_applied", "N/A"),
+                        "system": sl_tp_result.get("system", "pure_atr")
                     } if sl_tp_result is not None else None
                 }
 

@@ -150,7 +150,10 @@ PROTECTION_CONFIG = {
 # === SL/TP System Configuration ===
 SL_TP_CONFIG = {
     "min_stop_buffer_ticks": 2,         # Safety buffer beyond broker minimum
-    "prefer_structure": False,          # Future: structure-aware SL/TP (Phase 2)
+    "prefer_structure": True,           # Use structure-aware SL/TP (Phase 2)
+    "structure_sl_buffer_pips": 10,     # Buffer beyond structure invalidation
+    "fallback_sl_multiplier": 1.5,      # ATR fallback SL multiplier
+    "fallback_tp_multiplier": 2.0,      # ATR fallback TP multiplier
     "max_sl_pips": 70,                  # Maximum SL distance (safety cap)
     "fallback_sl_pips": 25,             # Emergency fallback SL
     "fallback_tp_pips": 50,             # Emergency fallback TP
