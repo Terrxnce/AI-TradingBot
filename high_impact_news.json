@@ -1,28 +1,16 @@
 [
   {
     "event": "Flash Manufacturing PMI",
-    "datetime": "2025-08-21T14:45:00",
+    "datetime": "2025-08-21T13:45:00",
     "currency": "USD",
     "impact": "High",
-    "forecast": null,
-    "previous": null,
-    "actual": null,
-    "outcome": "Pending",
-    "strength": "High Impact",
-    "category": "Economic Data",
-    "note": "Flash Manufacturing PMI - High impact on USD pairs"
+    "category": "Economic Data"
   },
   {
     "event": "Flash Services PMI",
-    "datetime": "2025-08-21T14:45:00",
+    "datetime": "2025-08-21T13:45:00",
     "currency": "USD",
     "impact": "High",
-    "forecast": null,
-    "previous": null,
-    "actual": null,
-    "outcome": "Pending",
-    "strength": "High Impact",
-    "category": "Economic Data",
-    "note": "Flash Services PMI - High impact on USD pairs"
+    "category": "Economic Data"
   }
 ] 
