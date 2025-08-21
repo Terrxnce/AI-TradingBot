@@ -14,10 +14,24 @@ def get_news_protection_enabled():
     """Check if news protection is enabled"""
     return CONFIG.get("enable_news_protection", True)
 
+# Cache for news events to prevent multiple loads
+_news_events_cache = None
+_news_cache_timestamp = None
+
 def get_high_impact_news():
     """
     Get high-impact news events from manually updated JSON file
+    Uses caching to prevent multiple loads during initialization
     """
+    global _news_events_cache, _news_cache_timestamp
+    
+    # Check if we have recent cache (within 5 minutes)
+    now = datetime.now()
+    if (_news_events_cache is not None and 
+        _news_cache_timestamp is not None and 
+        (now - _news_cache_timestamp).total_seconds() < 300):  # 5 minutes cache
+        return _news_events_cache
+    
     try:
         # Load from manually updated JSON file
         possible_paths = [
@@ -33,12 +47,17 @@ def get_high_impact_news():
                         events = json.load(f)
                     if events:
                         print(f"📰 Loaded {len(events)} high-impact events from {file_path}")
+                        # Update cache
+                        _news_events_cache = events
+                        _news_cache_timestamp = now
                         return events
             except Exception as e:
                 print(f"⚠️ Error loading from {file_path}: {e}")
                 continue
         
         print("⚠️ No news data available - trading without news protection")
+        _news_events_cache = []
+        _news_cache_timestamp = now
         return []
         
     except Exception as e:
@@ -227,8 +246,14 @@ def refresh_news_data():
     """
     Refresh news data by reloading the manually updated JSON file
     """
+    global _news_events_cache, _news_cache_timestamp
+    
     try:
         print("🔄 Reloading manually updated news data...")
+        # Clear cache to force reload
+        _news_events_cache = None
+        _news_cache_timestamp = None
+        
         events = get_high_impact_news()
         if events:
             print(f"✅ Successfully reloaded {len(events)} news events")
