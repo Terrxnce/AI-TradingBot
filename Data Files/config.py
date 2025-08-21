@@ -39,7 +39,7 @@ CONFIG = {
     "lot_sizes": {               # Symbol-specific lot sizes
         "XAUUSD": 0.01,
         "US500.cash": 3.5,
-        "EURUSD": 0.01,
+        "EURUSD": 1.25,
         "GBPUSD": 0.01,
         "GER40.cash": 1.5,
         "NVDA": 35.0,
@@ -91,9 +91,10 @@ CONFIG = {
 
     # ✅ News Protection
     "enable_news_protection": True,
-    "news_protection_minutes": 20,
+    "news_protection_minutes": 30,           # Minutes before/after to block trading
+    "news_impact_filter": ["High"],          # Which impacts to block (High/Medium/Low)
     "news_refresh_interval_hours": 24,
-    "auto_disable_on_no_news": True,  # Automatically disable protection when no events
+    "auto_disable_on_no_news": True,         # Automatically disable protection when no events
 
     # ✅ Post-Session Trading - REMOVED (Complex logic replaced by protection system)
     # Session management now handled by PROTECTION_CONFIG.session_end_utc

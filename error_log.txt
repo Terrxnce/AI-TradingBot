@@ -293,3 +293,55 @@
 2025-08-20 23:56:02,214 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
 2025-08-20 23:56:02,391 - INFO - ✅ Success in trade_execution: Trade executed: SELL AUDJPY @ 94.796
 2025-08-20 23:56:02,531 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-20 23:59:22,610 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 00:00:10,514 - INFO - ℹ️ Info in trade_execution: Price: 94.798 | SL: 94.889 | TP: 94.649
+2025-08-21 00:00:10,515 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 00:00:10,678 - INFO - ✅ Success in trade_execution: Trade executed: SELL AUDJPY @ 94.798
+2025-08-21 00:00:10,826 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 00:15:03,335 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-21 00:15:03,335 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-21 00:15:03,336 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-21 00:15:05,352 - INFO - ✅ MT5 initialized successfully
+2025-08-21 00:16:39,942 - INFO - ℹ️ Info in trade_execution: Price: 94.780 | SL: 94.869 | TP: 94.648
+2025-08-21 00:16:39,943 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 00:16:40,103 - INFO - ✅ Success in trade_execution: Trade executed: SELL AUDJPY @ 94.780
+2025-08-21 00:16:40,294 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 01:01:28,488 - INFO - ℹ️ Info in trade_execution: Price: 94.791 | SL: 94.859 | TP: 94.641
+2025-08-21 01:01:28,488 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 01:01:28,656 - INFO - ✅ Success in trade_execution: Trade executed: SELL AUDJPY @ 94.791
+2025-08-21 01:01:28,805 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 01:32:08,523 - INFO - ℹ️ Info in trade_execution: Price: 94.830 | SL: 94.918 | TP: 94.669
+2025-08-21 01:32:08,524 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 01:32:08,688 - INFO - ✅ Success in trade_execution: Trade executed: SELL AUDJPY @ 94.830
+2025-08-21 01:32:08,907 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 02:01:31,617 - INFO - ℹ️ Info in trade_execution: Price: 94.712 | SL: 94.822 | TP: 94.550
+2025-08-21 02:01:31,617 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 02:01:31,641 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
+2025-08-21 02:16:34,897 - INFO - ℹ️ Info in trade_execution: Price: 94.707 | SL: 94.797 | TP: 94.524
+2025-08-21 02:16:34,898 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 02:16:34,923 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
+2025-08-21 02:31:27,763 - INFO - ℹ️ Info in trade_execution: Price: 94.740 | SL: 94.848 | TP: 94.573
+2025-08-21 02:31:27,763 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 02:31:27,789 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
+2025-08-21 02:46:26,313 - INFO - ℹ️ Info in trade_execution: Price: 94.784 | SL: 94.904 | TP: 94.617
+2025-08-21 02:46:26,314 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 02:46:26,347 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
+2025-08-21 03:01:20,747 - INFO - ℹ️ Info in trade_execution: Price: 94.817 | SL: 94.908 | TP: 94.626
+2025-08-21 03:01:20,748 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 03:01:20,770 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
+2025-08-21 03:17:17,686 - INFO - ℹ️ Info in trade_execution: Price: 94.662 | SL: 94.807 | TP: 94.505
+2025-08-21 03:17:17,687 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 03:17:17,713 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
+2025-08-21 03:31:23,292 - INFO - ℹ️ Info in trade_execution: Price: 94.647 | SL: 94.745 | TP: 94.446
+2025-08-21 03:31:23,292 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 03:31:23,317 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
+2025-08-21 03:46:36,020 - INFO - ℹ️ Info in trade_execution: Price: 94.641 | SL: 94.764 | TP: 94.473
+2025-08-21 03:46:36,021 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 03:46:36,045 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
+2025-08-21 04:01:34,634 - INFO - ℹ️ Info in trade_execution: Price: 94.633 | SL: 94.700 | TP: 94.404
+2025-08-21 04:01:34,634 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 04:01:34,657 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
+2025-08-21 04:04:21,774 - INFO - ℹ️ Info in trade_execution: Price: 0.64223 | SL: 0.64316 | TP: 0.64102
+2025-08-21 04:04:21,775 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 04:04:21,798 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
+2025-08-21 06:51:30,490 - INFO - ✅ Success in bot_initialization: MT5 initialized

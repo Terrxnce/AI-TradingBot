@@ -44,7 +44,7 @@ from shared.time_align import next_boundary_utc, sleep_until, now_utc
 from risk_guard import can_trade
 from trade_logger import log_trade
 from session_utils import detect_session
-from news_guard import get_macro_sentiment, should_block_trading
+from news_guard import get_macro_sentiment, is_trading_blocked_by_news
 # from equity_cycle_manager import check_equity_cycle, is_trades_paused  # REMOVED - replaced by profit_protection_manager
 
 # New unified profit protection system
@@ -346,12 +346,14 @@ def run_bot():
                         return _json.loads(f.read_text(encoding="utf-8"))
                     except Exception:
                         return []
-                from news_guard import is_trade_blocked_by_news
+                from news_guard import is_trading_blocked_by_news
                 news_events = _load_manual_news_blocks()
                 now = datetime.now()
                 
-                if is_trade_blocked_by_news(symbol, news_events, now):
-                    print(f"🚫 Skipping {symbol} — news protection active")
+                # Check if trade is blocked by news
+                blocked, reason = is_trading_blocked_by_news(symbol)
+                if blocked:
+                    print(f"🚫 Skipping {symbol} — {reason}")
                     # Log missed trade reason
                     log_entry = {
                         "timestamp": datetime.now().isoformat(),
@@ -735,7 +737,7 @@ def run_bot():
                     "loop_count": loop_count + 1,
                     "last_analysis": now.isoformat(),
                     "mt5_connected": bool(mt5.terminal_info()),
-                    "news_protection_active": should_block_trading(),
+                    "news_protection_active": is_trading_blocked_by_news()[0],
                     "current_hour": now.hour,
                     "trading_window_active": current_config.get("restrict_usd_to_am", False)
                 }

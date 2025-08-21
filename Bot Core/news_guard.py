@@ -6,6 +6,10 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), 'Data Files'))
 from config import CONFIG
 
+# Cache for news events to prevent multiple loads
+_news_events_cache = None
+_news_cache_timestamp = None
+
 def get_news_protection_minutes():
     """Get news protection window from config"""
     return CONFIG.get("news_protection_minutes", 30)  # Default 30 minutes
@@ -13,10 +17,6 @@ def get_news_protection_minutes():
 def get_news_protection_enabled():
     """Check if news protection is enabled"""
     return CONFIG.get("enable_news_protection", True)
-
-# Cache for news events to prevent multiple loads
-_news_events_cache = None
-_news_cache_timestamp = None
 
 def get_high_impact_news():
     """
@@ -71,32 +71,15 @@ def extract_currencies_from_symbol(symbol):
     """
     # Common currency pairs
     currency_pairs = {
-        'EURUSD': ('EUR', 'USD'),
-        'GBPUSD': ('GBP', 'USD'),
-        'USDJPY': ('USD', 'JPY'),
-        'USDCHF': ('USD', 'CHF'),
-        'AUDUSD': ('AUD', 'USD'),
-        'USDCAD': ('USD', 'CAD'),
-        'NZDUSD': ('NZD', 'USD'),
-        'EURJPY': ('EUR', 'JPY'),
-        'GBPJPY': ('GBP', 'JPY'),
-        'EURGBP': ('EUR', 'GBP'),
-        'AUDCAD': ('AUD', 'CAD'),
-        'CADJPY': ('CAD', 'JPY'),
-        'NZDJPY': ('NZD', 'JPY'),
-        'GBPAUD': ('GBP', 'AUD'),
-        'EURAUD': ('EUR', 'AUD'),
-        'GBPNZD': ('GBP', 'NZD'),
-        'EURNZD': ('EUR', 'NZD'),
-        'AUDNZD': ('AUD', 'NZD'),
-        'GBPCAD': ('GBP', 'CAD'),
-        'EURCAD': ('EUR', 'CAD'),
-        'AUDCHF': ('AUD', 'CHF'),
-        'CADCHF': ('CAD', 'CHF'),
-        'NZDCHF': ('NZD', 'CHF'),
-        'GBPCHF': ('GBP', 'CHF'),
-        'EURCHF': ('EUR', 'CHF'),
-        'CHFJPY': ('CHF', 'JPY'),
+        'EURUSD': ('EUR', 'USD'), 'GBPUSD': ('GBP', 'USD'), 'USDJPY': ('USD', 'JPY'),
+        'USDCHF': ('USD', 'CHF'), 'AUDUSD': ('AUD', 'USD'), 'USDCAD': ('USD', 'CAD'),
+        'NZDUSD': ('NZD', 'USD'), 'EURJPY': ('EUR', 'JPY'), 'GBPJPY': ('GBP', 'JPY'),
+        'EURGBP': ('EUR', 'GBP'), 'AUDCAD': ('AUD', 'CAD'), 'CADJPY': ('CAD', 'JPY'),
+        'NZDJPY': ('NZD', 'JPY'), 'GBPAUD': ('GBP', 'AUD'), 'EURAUD': ('EUR', 'AUD'),
+        'GBPNZD': ('GBP', 'NZD'), 'EURNZD': ('EUR', 'NZD'), 'AUDNZD': ('AUD', 'NZD'),
+        'GBPCAD': ('GBP', 'CAD'), 'EURCAD': ('EUR', 'CAD'), 'AUDCHF': ('AUD', 'CHF'),
+        'CADCHF': ('CAD', 'CHF'), 'NZDCHF': ('NZD', 'CHF'), 'GBPCHF': ('GBP', 'CHF'),
+        'EURCHF': ('EUR', 'CHF'), 'CHFJPY': ('CHF', 'JPY'),
     }
     
     # Check if it's a known currency pair
@@ -112,98 +95,90 @@ def extract_currencies_from_symbol(symbol):
     # Default fallback
     return ('USD', 'USD')
 
-def is_trade_blocked_by_news(symbol, events, now):
+def is_trading_blocked_by_news(symbol=None):
     """
-    Check if a trade should be blocked due to high-impact news
-    Returns True if trade should be blocked
-    """
-    if not events:
-        return False
+    🎯 MAIN FUNCTION: Check if trading should be blocked due to news
     
-    # Extract currencies from symbol
-    base_currency, quote_currency = extract_currencies_from_symbol(symbol)
+    Args:
+        symbol (str, optional): Specific symbol to check. If None, checks all symbols.
     
-    # Get protection window
-    protection_minutes = get_news_protection_minutes()
-    
-    for event in events:
-        try:
-            # Parse event datetime
-            event_time_str = event.get('datetime')
-            if not event_time_str:
-                continue
-            
-            event_time = datetime.fromisoformat(event_time_str.replace('Z', '+00:00'))
-            
-            # Calculate protection window
-            protection_start = event_time - timedelta(minutes=protection_minutes)
-            protection_end = event_time + timedelta(minutes=protection_minutes)
-            
-            # Check if current time is in protection window
-            if protection_start <= now <= protection_end:
-                # Check if event currency matches symbol currencies
-                event_currency = event.get('currency', '').upper()
-                if event_currency in [base_currency, quote_currency]:
-                    print(f"🚫 News protection active for {symbol}:")
-                    print(f"   Event: {event.get('event', 'High-impact news')}")
-                    print(f"   Currency: {event_currency}")
-                    print(f"   Event time: {event_time.strftime('%Y-%m-%d %H:%M')}")
-                    print(f"   Protection window: {protection_start.strftime('%H:%M')} - {protection_end.strftime('%H:%M')}")
-                    print(f"   Current time: {now.strftime('%H:%M')}")
-                    return True
-        
-        except Exception as e:
-            print(f"⚠️ Error processing news event: {e}")
-            continue
-    
-    return False
-
-def is_news_protection_active():
-    """
-    Check if we're in a news protection window (30min before/after high-impact news)
-    Returns True if trading should be blocked due to news
+    Returns:
+        bool: True if trading should be blocked
+        str: Reason for blocking (if blocked)
     """
     # Check if news protection is enabled
     if not get_news_protection_enabled():
-        return False
+        return False, "News protection disabled"
+    
+    # Get impact filter from config
+    impact_filter = CONFIG.get("news_impact_filter", ["High"])
+    
+    # Check if auto-disable is enabled and no real news events exist
+    if CONFIG.get("auto_disable_on_no_news", True):
+        events = get_high_impact_news()
+        if events and all(event.get("impact") == "None" or event.get("category") == "Market Status" for event in events):
+            return False, "No high-impact news today - protection auto-disabled"
     
     try:
-        # Get current time
         now = datetime.now()
+        events = get_high_impact_news()
+        protection_minutes = get_news_protection_minutes()
         
-        # Get high-impact news events
-        news_events = get_high_impact_news()
+        if not events:
+            return False, "No news events found"
         
-        # Check if any event is blocking trading
-        for event in news_events:
+        # Check each event
+        for event in events:
             try:
                 event_time_str = event.get('datetime')
                 if not event_time_str:
                     continue
                 
                 event_time = datetime.fromisoformat(event_time_str.replace('Z', '+00:00'))
-                protection_minutes = get_news_protection_minutes()
-                
-                # Calculate protection window
                 protection_start = event_time - timedelta(minutes=protection_minutes)
                 protection_end = event_time + timedelta(minutes=protection_minutes)
                 
                 # Check if current time is in protection window
                 if protection_start <= now <= protection_end:
-                    print(f"🚫 News protection active: {event.get('event', 'High-impact news')}")
-                    print(f"   Protection window: {protection_start.strftime('%H:%M')} - {protection_end.strftime('%H:%M')}")
-                    print(f"   Current time: {now.strftime('%H:%M')}")
-                    return True
+                    event_currency = event.get('currency', '').upper()
+                    event_impact = event.get('impact', 'High')
+                    
+                    # Check if event impact matches our filter
+                    if event_impact not in impact_filter:
+                        continue  # Skip this event if impact doesn't match filter
+                    
+                    # If no specific symbol, block all trading
+                    if symbol is None:
+                        print(f"🚫 News protection active:")
+                        print(f"   Event: {event.get('event', 'High-impact news')}")
+                        print(f"   Currency: {event_currency}")
+                        print(f"   Impact: {event_impact}")
+                        print(f"   Event time: {event_time.strftime('%Y-%m-%d %H:%M')} UTC")
+                        print(f"   Protection window: {protection_start.strftime('%H:%M')} - {protection_end.strftime('%H:%M')} UTC")
+                        print(f"   Current time: {now.strftime('%H:%M')} UTC")
+                        return True, f"News protection: {event.get('event', 'High-impact news')}"
+                    
+                    # If specific symbol, check currency match
+                    base_currency, quote_currency = extract_currencies_from_symbol(symbol)
+                    if event_currency in [base_currency, quote_currency]:
+                        print(f"🚫 News protection active for {symbol}:")
+                        print(f"   Event: {event.get('event', 'High-impact news')}")
+                        print(f"   Currency: {event_currency}")
+                        print(f"   Impact: {event_impact}")
+                        print(f"   Event time: {event_time.strftime('%Y-%m-%d %H:%M')} UTC")
+                        print(f"   Protection window: {protection_start.strftime('%H:%M')} - {protection_end.strftime('%H:%M')} UTC")
+                        print(f"   Current time: {now.strftime('%H:%M')} UTC")
+                        return True, f"News protection for {symbol}: {event.get('event', 'High-impact news')}"
             
             except Exception as e:
                 print(f"⚠️ Error processing news event: {e}")
                 continue
         
-        return False
+        return False, "No news restrictions"
         
     except Exception as e:
         print(f"❌ Error checking news protection: {e}")
-        return False
+        return False, f"Error: {e}"
 
 def get_macro_sentiment(symbol):
     """Get macro sentiment for a symbol (existing function)"""
@@ -213,34 +188,6 @@ def get_macro_sentiment(symbol):
     except Exception as e:
         print(f"❌ Error getting macro sentiment: {e}")
         return "neutral"
-
-def check_news_before_trade(symbol):
-    """
-    Check if it's safe to trade given current news conditions
-    Returns (can_trade, reason)
-    """
-    if not get_news_protection_enabled():
-        return True, "News protection disabled"
-    
-    if is_news_protection_active():
-        return False, "High-impact news protection active"
-    
-    return True, "No news restrictions"
-
-def should_block_trading():
-    """
-    Main function to check if trading should be blocked due to news
-    Returns True if trading should be blocked
-    """
-    # Check if auto-disable is enabled and no real news events exist
-    if CONFIG.get("auto_disable_on_no_news", True):
-        events = get_high_impact_news()
-        # Check if events are just placeholder/no-news entries
-        if events and all(event.get("impact") == "None" or event.get("category") == "Market Status" for event in events):
-            print("📈 No high-impact news today - news protection auto-disabled")
-            return False
-    
-    return is_news_protection_active()
 
 def refresh_news_data():
     """
@@ -287,3 +234,24 @@ def get_upcoming_news_events(hours_ahead=24):
     except Exception as e:
         print(f"❌ Error getting upcoming events: {e}")
         return []
+
+# 🎯 SIMPLIFIED INTERFACE FUNCTIONS (for backward compatibility)
+def should_block_trading():
+    """Check if trading should be blocked (all symbols)"""
+    blocked, reason = is_trading_blocked_by_news()
+    return blocked
+
+def is_news_protection_active():
+    """Check if news protection is active (all symbols)"""
+    blocked, reason = is_trading_blocked_by_news()
+    return blocked
+
+def check_news_before_trade(symbol):
+    """Check if it's safe to trade a specific symbol"""
+    blocked, reason = is_trading_blocked_by_news(symbol)
+    return not blocked, reason
+
+def is_trade_blocked_by_news(symbol, events, now):
+    """Legacy function - redirects to new system"""
+    blocked, reason = is_trading_blocked_by_news(symbol)
+    return blocked

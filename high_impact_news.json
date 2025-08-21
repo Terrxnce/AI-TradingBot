@@ -1,15 +1,28 @@
 [
   {
-    "event": "No High-Impact Events Today",
-    "datetime": "2025-08-18T12:00:00",
-    "currency": "N/A",
-    "impact": "None",
+    "event": "Flash Manufacturing PMI",
+    "datetime": "2025-08-21T14:45:00",
+    "currency": "USD",
+    "impact": "High",
     "forecast": null,
     "previous": null,
     "actual": null,
-    "outcome": "Clear trading conditions",
-    "strength": "No News",
-    "category": "Market Status",
-    "note": "Updated for August 18, 2025 - No major economic events scheduled"
+    "outcome": "Pending",
+    "strength": "High Impact",
+    "category": "Economic Data",
+    "note": "Flash Manufacturing PMI - High impact on USD pairs"
+  },
+  {
+    "event": "Flash Services PMI",
+    "datetime": "2025-08-21T14:45:00",
+    "currency": "USD",
+    "impact": "High",
+    "forecast": null,
+    "previous": null,
+    "actual": null,
+    "outcome": "Pending",
+    "strength": "High Impact",
+    "category": "Economic Data",
+    "note": "Flash Services PMI - High impact on USD pairs"
   }
 ] 

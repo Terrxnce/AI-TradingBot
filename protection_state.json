@@ -1,10 +1,11 @@
 {
-  "session_baseline_equity": 9836.13,
+  "session_baseline_equity": 9536.21,
   "partial_done": false,
   "full_done": false,
   "new_trade_since_partial": false,
   "blocked_for_drawdown": false,
   "lot_reset_after_partial": false,
-  "last_reset_ts": "2025-08-20T23:53:32.598126",
-  "trailing_positions": {}
+  "last_reset_ts": "2025-08-21T01:30:03.705231",
+  "trailing_positions": {},
+  "baseline_set": true
 }
