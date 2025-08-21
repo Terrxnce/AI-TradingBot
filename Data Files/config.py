@@ -93,6 +93,7 @@ CONFIG = {
     "pm_session_start": 17,        # 17:00 UTC (6:00 PM Irish)
     "pm_session_end": 19,          # 19:00 UTC (8:00 PM Irish)
     "enable_pm_session_only": True, # Enable PM session trading
+    "pm_session_lot_multiplier": 0.5, # Use 50% of normal lot size during PM session
 
     # ✅ News Protection
     "enable_news_protection": True,

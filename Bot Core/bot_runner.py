@@ -609,7 +609,18 @@ def run_bot():
                         # Use standard config-based lot sizing (no structure-aware adaptive sizing)
                         lot_sizes = {k.upper(): v for k, v in current_config.get("lot_sizes", {}).items()}
                         lot = lot_sizes.get(symbol_key, current_config.get("default_lot_size", 0.1))
-                        print(f"📊 Using config-based lot size: {lot}")
+                        
+                        # ✅ PM Session Lot Size Reduction
+                        pm_session_start = current_config.get("pm_session_start", 17)
+                        pm_session_end = current_config.get("pm_session_end", 19)
+                        pm_lot_multiplier = current_config.get("pm_session_lot_multiplier", 1.0)
+                        
+                        if pm_session_start <= current_hour < pm_session_end:
+                            original_lot = lot
+                            lot = lot * pm_lot_multiplier
+                            print(f"🕔 PM Session: Reduced lot size from {original_lot} to {lot} (50% reduction)")
+                        else:
+                            print(f"📊 Using config-based lot size: {lot}")
 
                         print(f"🧶 Resolved lot size for {symbol}: {lot}")
                         print(f"📊 ATR-based SL: {sl} ({sl_tp_result['sl_from']}) | TP: {tp} ({sl_tp_result['tp_from']})")
