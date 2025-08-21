@@ -83,15 +83,20 @@ CONFIG = {
 
     # ✅ USD Trading Control
     "usd_related_keywords": ["USD", "US500", "US30", "NAS100", "NVDA", "TSLA"],
-    "restrict_usd_to_am": False,
+    "restrict_usd_to_am": True,
     "allowed_trading_window": {
-        "start_hour": 0, #ondon session
-        "end_hour": 24, 
+        "start_hour": 12.5,        # 12:30 UTC (1:30 PM Irish)
+        "end_hour": 19,            # 19:00 UTC (8:00 PM Irish) - Extended for PM session
     },
+    
+    # ✅ PM Session Configuration
+    "pm_session_start": 17,        # 17:00 UTC (6:00 PM Irish)
+    "pm_session_end": 19,          # 19:00 UTC (8:00 PM Irish)
+    "enable_pm_session_only": True, # Enable PM session trading
 
     # ✅ News Protection
     "enable_news_protection": True,
-    "news_protection_minutes": 30,           # Minutes before/after to block trading
+    "news_protection_minutes": 20,         # Minutes before/after to block trading
     "news_impact_filter": ["High"],          # Which impacts to block (High/Medium/Low)
     "news_refresh_interval_hours": 24,
     "auto_disable_on_no_news": True,         # Automatically disable protection when no events
@@ -144,7 +149,7 @@ PROTECTION_CONFIG = {
     "apply_to_profitable_only": True,      # Only apply to profitable trades
     
     # Session Management
-    "session_end_utc": "16:00",            # Session end time (UTC)
+    "session_end_utc": "19:00",            # Session end time (UTC) - Extended for PM session
     "cycle_epsilon_pct": 0.10,             # ±0.1% tolerance for cycle reset
 }
 
