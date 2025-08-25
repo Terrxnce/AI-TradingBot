@@ -83,9 +83,22 @@ class ProtectionManager:
         return ((current_equity - baseline) / baseline) * 100
     
     def update_session_baseline(self):
-        """Update session baseline on first trade"""
-        if not self.has_open_positions():
-            self.state["session_baseline_equity"] = self.get_account_equity()
+        """Update session baseline on first trade or new account"""
+        current_equity = self.get_account_equity()
+        baseline = self.state["session_baseline_equity"]
+        
+        # Check if this is a new account (equity differs significantly from baseline)
+        if baseline > 0:
+            equity_diff_pct = abs((current_equity - baseline) / baseline) * 100
+            if equity_diff_pct > 50:  # If equity differs by more than 50%, likely new account
+                print(f"🔄 Detected new account - updating baseline")
+                print(f"   Old baseline: ${baseline:.2f}")
+                print(f"   Current equity: ${current_equity:.2f}")
+                print(f"   Difference: {equity_diff_pct:.1f}%")
+        
+        # Only update baseline if it's significantly different (prevent constant updates)
+        if not self.has_open_positions() and abs(current_equity - baseline) > 1.0:
+            self.state["session_baseline_equity"] = current_equity
             self.save_state()
             print(f"📊 Session baseline updated: ${self.state['session_baseline_equity']:.2f}")
     
@@ -104,28 +117,47 @@ class ProtectionManager:
     def should_reset_cycle(self):
         """Check if protection cycle should reset"""
         # Reset conditions:
-        # 1. No open trades AND floating PnL within ±0.1% of baseline
+        # 1. Session has actually changed (not just no open trades)
         # 2. Session end time reached
         
-        if self.has_open_positions():
-            return False
-        
-        floating_pct = self.get_floating_equity_pct()
-        epsilon = PROTECTION_CONFIG["cycle_epsilon_pct"]
-        
-        if abs(floating_pct) <= epsilon:
-            return True
-        
-        # Check session end time
-        now = datetime.now()
-        session_end = PROTECTION_CONFIG["session_end_utc"]
+        # Check if session has changed
         try:
-            end_hour, end_min = map(int, session_end.split(':'))
-            end_time = now.replace(hour=end_hour, minute=end_min, second=0, microsecond=0)
-            if now >= end_time:
+            from session_manager import get_current_session_info
+            current_session = get_current_session_info()
+            session_type = current_session.get("session_type", "OFF")
+            
+            # NEVER reset when in OFF session - this prevents the loop
+            if session_type == "OFF":
+                # Just update the session type without resetting
+                last_session = self.state.get("last_session_type", "OFF")
+                if session_type != last_session:
+                    self.state["last_session_type"] = session_type
+                    self.save_state()
+                return False
+            
+            # Get last session from state
+            last_session = self.state.get("last_session_type", "OFF")
+            
+            # Only reset if session actually changed to a trading session
+            if session_type != last_session and session_type != "OFF":
+                self.state["last_session_type"] = session_type
+                self.save_state()
                 return True
-        except:
-            pass
+                
+        except Exception as e:
+            print(f"⚠️ Error checking session change: {e}")
+        
+        # Check session end time (legacy fallback) - but not in OFF session
+        now = datetime.now()
+        session_end = PROTECTION_CONFIG.get("session_end_utc")
+        if session_end:
+            try:
+                end_hour, end_min = map(int, session_end.split(':'))
+                end_time = now.replace(hour=end_hour, minute=end_min, second=0, microsecond=0)
+                if now >= end_time:
+                    return True
+            except:
+                pass
         
         return False
     
@@ -138,7 +170,8 @@ class ProtectionManager:
             "blocked_for_drawdown": False,
             "lot_reset_after_partial": False,
             "last_reset_ts": datetime.now().isoformat(),
-            "trailing_positions": {}
+            "trailing_positions": {},
+            "account_detected_this_session": False  # Reset account detection flag
         })
         self.update_session_baseline()
         self.save_state()
@@ -404,6 +437,7 @@ class ProtectionManager:
                 self.state["new_trade_since_partial"] = False
                 self.save_state()
                 print("📊 Partial close completed - lot sizes reset for future trades")
+                print("🔄 PM multiplier will be reapplied automatically for future trades")
         
         # Check +2% full trigger (only if partial done and new trade since)
         if (floating_pct >= full_threshold and 
@@ -439,6 +473,22 @@ class ProtectionManager:
             if self.should_reset_cycle():
                 self.reset_protection_cycle()
                 return
+            
+            # Auto-detect new account and update baseline (only once per session)
+            current_equity = self.get_account_equity()
+            baseline = self.state["session_baseline_equity"]
+            
+            # Only check for new account if we haven't already done so this session
+            if baseline > 0 and not self.state.get("account_detected_this_session", False):
+                equity_diff_pct = abs((current_equity - baseline) / baseline) * 100
+                if equity_diff_pct > 50:  # New account detected
+                    print(f"🔄 Auto-detecting new account - updating baseline")
+                    self.state["session_baseline_equity"] = current_equity
+                    self.state["blocked_for_drawdown"] = False  # Reset drawdown block
+                    self.state["account_detected_this_session"] = True  # Mark as detected
+                    self.save_state()
+                    print(f"📊 New baseline set: ${current_equity:.2f}")
+                    return {"action": "continue", "lot_multiplier": 1.0}
             
             # Update baseline on first trade of session
             if not self.has_open_positions() and not self.state.get("baseline_set", False):

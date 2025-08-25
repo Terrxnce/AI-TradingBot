@@ -345,3 +345,193 @@
 2025-08-21 04:04:21,775 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
 2025-08-21 04:04:21,798 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10017 - Trade disabled
 2025-08-21 06:51:30,490 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 07:53:45,551 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 07:54:02,924 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 07:58:32,500 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 08:27:36,952 - ERROR - ❌ Error in bot_initialization: RuntimeError: ❌ MT5 initialization failed: (-6, 'Terminal: Authorization failed')
+2025-08-21 08:28:49,146 - ERROR - ❌ Error in bot_initialization: RuntimeError: ❌ MT5 initialization failed: (-6, 'Terminal: Authorization failed')
+2025-08-21 08:30:53,661 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 08:31:48,330 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 12:15:03,176 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-21 12:15:03,177 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-21 12:15:03,177 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-21 12:15:05,193 - INFO - ✅ MT5 initialized successfully
+2025-08-21 16:15:03,750 - WARNING - ⚠️ MT5 terminal info unavailable
+2025-08-21 16:15:03,751 - WARNING - ⚠️ MT5 connection unhealthy, attempting reconnection...
+2025-08-21 16:15:03,751 - INFO - 🔄 Attempting MT5 reconnection...
+2025-08-21 16:15:05,766 - INFO - ✅ MT5 initialized successfully
+2025-08-21 17:02:33,874 - INFO - ℹ️ Info in trade_execution: Price: 174.72 | SL: 176.19 | TP: 172.19
+2025-08-21 17:02:33,876 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 17:02:34,030 - INFO - ✅ Success in trade_execution: Trade executed: SELL NVDA @ 174.72
+2025-08-21 17:02:34,182 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 17:03:48,926 - INFO - ℹ️ Info in trade_execution: Price: 321.02 | SL: 323.74 | TP: 315.95
+2025-08-21 17:03:48,927 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 17:03:49,079 - INFO - ✅ Success in trade_execution: Trade executed: SELL TSLA @ 321.02
+2025-08-21 17:03:49,275 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 17:18:06,479 - INFO - ℹ️ Info in trade_execution: Price: 174.85 | SL: 175.99 | TP: 172.13
+2025-08-21 17:18:06,480 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 17:18:06,640 - INFO - ✅ Success in trade_execution: Trade executed: SELL NVDA @ 174.85
+2025-08-21 17:18:06,836 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 17:19:11,016 - INFO - ℹ️ Info in trade_execution: Price: 321.16 | SL: 324.07 | TP: 316.50
+2025-08-21 17:19:11,017 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 17:19:11,168 - INFO - ✅ Success in trade_execution: Trade executed: SELL TSLA @ 321.16
+2025-08-21 17:19:11,387 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 17:53:10,324 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 17:55:01,003 - INFO - ℹ️ Info in trade_execution: Price: 174.66 | SL: 176.11 | TP: 172.30
+2025-08-21 17:55:01,004 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 17:55:01,159 - INFO - ✅ Success in trade_execution: Trade executed: SELL NVDA @ 174.66
+2025-08-21 17:55:01,338 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 17:56:33,438 - INFO - ℹ️ Info in trade_execution: Price: 320.57 | SL: 323.61 | TP: 316.35
+2025-08-21 17:56:33,439 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 17:56:33,595 - INFO - ✅ Success in trade_execution: Trade executed: SELL TSLA @ 320.57
+2025-08-21 17:56:33,819 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 18:38:20,098 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 18:40:26,035 - INFO - ℹ️ Info in trade_execution: Price: 174.80 | SL: 176.19 | TP: 172.54
+2025-08-21 18:40:26,036 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 18:40:26,037 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10014 - Invalid volume
+2025-08-21 18:42:33,184 - INFO - ℹ️ Info in trade_execution: Price: 320.60 | SL: 321.54 | TP: 314.47
+2025-08-21 18:42:33,185 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 18:42:33,185 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10014 - Invalid volume
+2025-08-21 18:46:51,589 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 18:55:08,224 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 18:57:17,082 - INFO - ℹ️ Info in trade_execution: Price: 174.81 | SL: 176.05 | TP: 172.52
+2025-08-21 18:57:17,083 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 18:57:17,084 - ERROR - ❌ Error in trade_execution: Exception: Trade failed: 10014 - Invalid volume
+2025-08-21 19:01:24,846 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 19:02:44,469 - INFO - ℹ️ Info in trade_execution: Price: 175.05 | SL: 176.36 | TP: 173.01
+2025-08-21 19:02:44,470 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 19:02:44,637 - INFO - ✅ Success in trade_execution: Trade executed: SELL NVDA @ 175.05
+2025-08-21 19:02:44,943 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 19:04:32,667 - INFO - ℹ️ Info in trade_execution: Price: 320.87 | SL: 323.45 | TP: 316.89
+2025-08-21 19:04:32,668 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-21 19:04:32,820 - INFO - ✅ Success in trade_execution: Trade executed: SELL TSLA @ 320.87
+2025-08-21 19:04:33,079 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-21 19:36:27,939 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 19:36:29,591 - ERROR - ❌ Unhandled error: name 'detect_session' is not defined | Context: run_bot
+2025-08-21 19:41:15,322 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 20:07:41,379 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 20:11:41,780 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 20:18:47,122 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-21 20:29:46,163 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-22 00:34:46,289 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-22 01:03:19,795 - INFO - ℹ️ Info in trade_execution: Price: 95.443 | SL: 95.504 | TP: 95.182
+2025-08-22 01:03:19,798 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 01:03:19,954 - INFO - ✅ Success in trade_execution: Trade executed: SELL AUDJPY @ 95.443
+2025-08-22 01:03:20,143 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 01:32:25,485 - INFO - ℹ️ Info in trade_execution: Price: 95.355 | SL: 95.207 | TP: 95.466
+2025-08-22 01:32:25,486 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 01:32:25,644 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDJPY @ 95.355
+2025-08-22 01:32:25,844 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 02:17:18,272 - INFO - ℹ️ Info in trade_execution: Price: 95.417 | SL: 95.261 | TP: 95.522
+2025-08-22 02:17:18,273 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 02:17:19,843 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDJPY @ 95.417
+2025-08-22 02:17:20,019 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 02:47:04,680 - INFO - ℹ️ Info in trade_execution: Price: 95.376 | SL: 95.271 | TP: 95.521
+2025-08-22 02:47:04,680 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 02:47:04,856 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDJPY @ 95.376
+2025-08-22 02:47:05,053 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 03:32:20,695 - INFO - ℹ️ Info in trade_execution: Price: 95.467 | SL: 95.329 | TP: 95.592
+2025-08-22 03:32:20,696 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 03:32:20,851 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDJPY @ 95.467
+2025-08-22 03:32:21,012 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 03:47:12,774 - INFO - ℹ️ Info in trade_execution: Price: 95.479 | SL: 95.376 | TP: 95.635
+2025-08-22 03:47:12,775 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 03:47:12,938 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDJPY @ 95.479
+2025-08-22 03:47:13,068 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 06:37:25,059 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-22 13:32:25,407 - INFO - ℹ️ Info in trade_execution: Price: 319.95 | SL: 322.83 | TP: 316.64
+2025-08-22 13:32:25,410 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 13:32:25,434 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-22 14:31:47,665 - INFO - ℹ️ Info in trade_execution: Price: 319.95 | SL: 322.19 | TP: 316.21
+2025-08-22 14:31:47,667 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 14:31:47,690 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-22 14:47:09,354 - INFO - ℹ️ Info in trade_execution: Price: 324.84 | SL: 327.45 | TP: 320.84
+2025-08-22 14:47:09,355 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 14:47:09,510 - INFO - ✅ Success in trade_execution: Trade executed: SELL TSLA @ 324.84
+2025-08-22 14:47:09,682 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 15:03:46,229 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-22 15:07:10,416 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-22 15:08:38,197 - INFO - ℹ️ Info in trade_execution: Price: 176.82 | SL: 177.85 | TP: 173.79
+2025-08-22 15:08:38,199 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 15:08:38,367 - INFO - ✅ Success in trade_execution: Trade executed: SELL NVDA @ 176.82
+2025-08-22 15:08:38,635 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 15:10:36,333 - INFO - ℹ️ Info in trade_execution: Price: 334.45 | SL: 337.81 | TP: 328.61
+2025-08-22 15:10:36,334 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 15:10:36,488 - INFO - ✅ Success in trade_execution: Trade executed: SELL TSLA @ 334.45
+2025-08-22 15:10:36,648 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 18:19:10,333 - INFO - ℹ️ Info in trade_execution: Price: 146.616 | SL: 146.865 | TP: 146.230
+2025-08-22 18:19:10,334 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 18:19:10,487 - INFO - ✅ Success in trade_execution: Trade executed: SELL USDJPY @ 146.616
+2025-08-22 18:19:10,844 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 18:34:17,239 - INFO - ℹ️ Info in trade_execution: Price: 146.608 | SL: 146.827 | TP: 146.214
+2025-08-22 18:34:17,239 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 18:34:17,395 - INFO - ✅ Success in trade_execution: Trade executed: SELL USDJPY @ 146.608
+2025-08-22 18:34:17,561 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-22 19:49:10,733 - INFO - ℹ️ Info in trade_execution: Price: 146.859 | SL: 147.071 | TP: 146.529
+2025-08-22 19:49:10,734 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-22 19:49:10,895 - INFO - ✅ Success in trade_execution: Trade executed: SELL USDJPY @ 146.859
+2025-08-22 19:49:11,089 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-24 22:03:27,199 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-24 22:18:31,011 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-24 22:23:17,920 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-24 22:33:16,429 - INFO - ✅ Success in bot_initialization: MT5 initialized
+2025-08-25 01:06:12,225 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 336.60 | TP: 342.62
+2025-08-25 01:06:12,230 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 01:06:12,262 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 01:09:18,627 - INFO - ℹ️ Info in trade_execution: Price: 147.449 | SL: 147.601 | TP: 147.158
+2025-08-25 01:09:18,640 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 01:09:18,806 - INFO - ✅ Success in trade_execution: Trade executed: SELL USDJPY @ 147.449
+2025-08-25 01:09:18,977 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-25 01:11:59,076 - INFO - ℹ️ Info in trade_execution: Price: 95.561 | SL: 95.351 | TP: 95.617
+2025-08-25 01:11:59,077 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 01:11:59,239 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDJPY @ 95.561
+2025-08-25 01:11:59,369 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-25 01:20:12,094 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 01:20:12,095 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 01:20:12,117 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 01:34:24,863 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 01:34:24,864 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 01:34:24,886 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 01:49:09,794 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 01:49:09,795 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 01:49:09,818 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 02:04:24,354 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 02:04:24,356 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 02:04:24,378 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 02:18:50,547 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 02:18:50,548 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 02:18:50,573 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 02:23:47,559 - INFO - ℹ️ Info in trade_execution: Price: 95.472 | SL: 95.355 | TP: 95.658
+2025-08-25 02:23:47,561 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 02:23:47,717 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDJPY @ 95.472
+2025-08-25 02:23:47,843 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-25 02:34:09,769 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 02:34:09,770 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 02:34:09,798 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 02:41:14,942 - INFO - ℹ️ Info in trade_execution: Price: 0.64761 | SL: 0.64655 | TP: 0.64863
+2025-08-25 02:41:14,942 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 02:41:15,106 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDUSD @ 0.64761
+2025-08-25 02:41:15,295 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-25 02:49:22,108 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 02:49:22,108 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 02:49:22,131 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 03:04:37,484 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 03:04:37,485 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 03:04:37,511 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 03:19:54,248 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 03:19:54,249 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 03:19:54,276 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 03:24:50,273 - INFO - ℹ️ Info in trade_execution: Price: 95.525 | SL: 95.394 | TP: 95.682
+2025-08-25 03:24:50,274 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 03:24:50,426 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDJPY @ 95.525
+2025-08-25 03:24:50,568 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.
+2025-08-25 03:34:02,635 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 03:34:02,635 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 03:34:02,663 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 03:49:08,461 - INFO - ℹ️ Info in trade_execution: Price: 340.07 | SL: 337.58 | TP: 343.87
+2025-08-25 03:49:08,462 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 03:49:08,490 - WARNING - ⚠️ Warning in trade_execution: Market closed for TSLA. Skipping trade.
+2025-08-25 03:56:08,584 - INFO - ℹ️ Info in trade_execution: Price: 0.64804 | SL: 0.64694 | TP: 0.64894
+2025-08-25 03:56:08,585 - INFO - ℹ️ Info in trade_execution: Attempting trade execution (attempt 1/3)
+2025-08-25 03:56:08,744 - INFO - ✅ Success in trade_execution: Trade executed: BUY AUDUSD @ 0.64804
+2025-08-25 03:56:08,902 - INFO - ✅ Success in telegram_notification: Signal sent to Telegram.

@@ -12,5 +12,12 @@
     "currency": "USD",
     "impact": "High",
     "category": "Economic Data"
+  },
+  {
+    "event": "Fed Chair Powell Speaks",
+    "datetime": "2025-08-22T14:00:00",
+    "currency": "USD",
+    "impact": "High",
+    "category": "Central Bank"
   }
 ] 

@@ -38,14 +38,17 @@ import config
 from shared.settings import get_user_paths
 from shared.time_align import next_boundary_utc, sleep_until, now_utc
 
-# Trading modules (updated for new profit protection system)
-# from trailing_stop import apply_trailing_stop  # Replaced by profit_protection_manager
-# from position_manager import close_trades_at_4pm  # Replaced by profit_protection_manager
+# Trading modules (updated for new session system)
 from risk_guard import can_trade
 from trade_logger import log_trade
-from session_utils import detect_session
 from news_guard import get_macro_sentiment, is_trading_blocked_by_news
-# from equity_cycle_manager import check_equity_cycle, is_trades_paused  # REMOVED - replaced by profit_protection_manager
+
+# New session management system
+from session_manager import get_current_session_info, check_for_forced_close, is_trading_allowed, get_current_session_name
+from forced_close_manager import execute_forced_close
+
+# Hourly trade limiting system
+from hourly_limiter import can_trade_this_hour, record_trade, validate_session_symbol_combo
 
 # New unified profit protection system
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -110,8 +113,27 @@ def get_current_config():
     return reload_config()
 
 def is_pm_session():
-    now = datetime.now().time()
-    return dt_time(17, 0) <= now <= dt_time(21, 0)
+    """Check if currently in PM session (UTC-based)"""
+    from datetime import timezone
+    
+    now_utc = datetime.now(timezone.utc).time()
+    
+    try:
+        from config import CONFIG
+        pm_start = CONFIG.get("pm_session_start", 17)
+        pm_end = CONFIG.get("pm_session_end", 19)
+        
+        pm_start_time = dt_time(pm_start, 0)
+        pm_end_time = dt_time(pm_end, 0)
+        
+        return pm_start_time <= now_utc < pm_end_time
+        
+    except Exception as e:
+        print(f"⚠️ Error in PM session detection: {e}")
+        # Fallback
+        return dt_time(17, 0) <= now_utc < dt_time(19, 0)
+
+# Session management functions removed - now using session_manager module
 
 
 def align_if_needed():
@@ -247,7 +269,14 @@ def run_bot():
     except Exception as e:
         print(f"⚠️ Failed to send online notification: {e}")
     
-    trade_counter = {}
+    # Initialize hourly limiter cleanup
+    try:
+        from hourly_limiter import hourly_limiter
+        hourly_limiter.cleanup_old_timestamps(max_age_hours=24)
+        print("🧹 Hourly limiter cleanup completed")
+    except Exception as e:
+        print(f"⚠️ Failed to cleanup hourly limiter: {e}")
+    
     loop_count = 0
     print("✅ Bot started with enhanced error handling and performance monitoring")
     
@@ -306,27 +335,41 @@ def run_bot():
             now = datetime.now()
             current_hour = now.hour
 
-            for sym in trade_counter:
-                trade_counter[sym] = [t for t in trade_counter[sym] if (now - t).total_seconds() < 3600]
+            # ✅ NEW: Cleanup old hourly trade timestamps (daily)
+            if now.hour == 0 and now.minute < 5:  # Once per day at midnight
+                try:
+                    from hourly_limiter import hourly_limiter
+                    hourly_limiter.cleanup_old_timestamps(max_age_hours=24)
+                    print("🧹 Daily hourly limiter cleanup completed")
+                except Exception as e:
+                    print(f"⚠️ Failed to cleanup hourly limiter: {e}")
 
-            # Check for 4PM close trades
-            # close_trades_at_4pm() - now handled by protection cycle session reset
+            # ✅ NEW: Check for forced auto-close at session boundaries
+            forced_close_reason = check_for_forced_close()
+            if forced_close_reason:
+                print(f"🚨 FORCED CLOSE TRIGGERED: {forced_close_reason}")
+                close_results = execute_forced_close(forced_close_reason)
+                print(f"📊 Forced close completed: {close_results['closed_successfully']}/{close_results['total_positions']} positions closed")
+                
+                # Sleep until next session
+                from session_manager import get_next_session_start
+                next_session, next_start = get_next_session_start()
+                print(f"💤 Sleeping until next session: {next_session} at {next_start.strftime('%H:%M UTC')}")
+                time.sleep(60)  # Sleep for 1 minute before checking again
+                continue
             
-            # Check for post-session management
-            from post_session_manager import (
-                check_post_session_partial_close,
-                check_post_session_full_close,
-                check_post_session_hard_exit,
-                reset_post_session_state_if_needed
-            )
-            
-            # Reset post-session state if needed
-            reset_post_session_state_if_needed()
-            
-            # Check post-session profit management
-            check_post_session_partial_close()
-            check_post_session_full_close()
-            check_post_session_hard_exit()
+            # ✅ NEW: Check if trading is currently allowed
+            if not is_trading_allowed():
+                session_info = get_current_session_info()
+                print(f"⏸️ Trading not allowed - Current session: {session_info['session_type']}")
+                print(f"   Current UTC: {session_info['current_time_utc']}")
+                
+                # Sleep until next session
+                from session_manager import get_next_session_start
+                next_session, next_start = get_next_session_start()
+                print(f"💤 Sleeping until next session: {next_session} at {next_start.strftime('%H:%M UTC')}")
+                time.sleep(60)  # Sleep for 1 minute before checking again
+                continue
 
             for symbol in SYMBOLS:
                 print(f"\n⏳ Analyzing {symbol}...")
@@ -377,35 +420,7 @@ def run_bot():
                 # Check D.E.V.I equity cycle management - NOW HANDLED BY PROTECTION CYCLE
                 # check_equity_cycle()  # REMOVED - replaced by profit_protection_manager
                 
-                # USD time restriction check
-                if current_config.get("restrict_usd_to_am", False):
-                    keywords = current_config.get("usd_related_keywords", [])
-                    if any(k in symbol.upper() for k in keywords):
-                        time_window = current_config.get("allowed_trading_window", {})
-                        start = time_window.get("start_hour", 9)
-                        end = time_window.get("end_hour", 11)
-                        if not (start <= current_hour < end):
-                            print(f"⏳ Skipping {symbol} — outside {start}:00–{end}:00 window for USD-related pairs.")
-                            print(f"🕐 Current hour: {current_hour}, Window: {start}:00-{end}:00")
-                            # Log missed trade reason
-                            log_entry = {
-                                "timestamp": datetime.now().isoformat(),
-                                "symbol": symbol,
-                                "ai_decision": "BLOCKED",
-                                "ai_confidence": "N/A",
-                                "ai_reasoning": f"Outside USD trading window {start}:00-{end}:00",
-                                "ai_risk_note": "USD pairs restricted to morning session",
-                                "technical_score": 0.0,
-                                "ema_trend": "N/A",
-                                "final_direction": "BLOCKED",
-                                "executed": False,
-                                "ai_override": False,
-                                "override_reason": "USD time restriction",
-                                "execution_source": "usd_time_block"
-                            }
-                            with open(USER_PATHS["logs"] / "ai_decision_log.jsonl", "a", encoding="utf-8") as f:
-                                f.write(json.dumps(log_entry) + "\n")
-                            continue
+
 
                 try:
                     ensure_symbol_visible(symbol)
@@ -430,7 +445,8 @@ def run_bot():
 
                 ta_m15 = analyze_structure(candles_m15, timeframe=mt5.TIMEFRAME_M15)
                 ta_h1 = analyze_structure(candles_h1, timeframe=mt5.TIMEFRAME_H1)
-                session = detect_session()
+                session_info = get_current_session_info()
+                session = session_info["session_type"]
 
                 ta_signals = {**ta_m15, "h1_trend": ta_h1["ema_trend"], "session": session}
                 ta_signals["symbol"] = symbol
@@ -446,9 +462,17 @@ def run_bot():
                 ai_sentiment = get_ai_sentiment(prompt)
                 print("🧠 AI Response:\n", ai_sentiment.strip())
 
-                if current_config.get("enable_pm_session_only", False) and not is_pm_session():
-                    print(f"⏳ Skipping {symbol} — outside PM session window.")
+                # ✅ NEW: Enhanced session detection with new session system
+                session_info = get_current_session_info()
+                
+                # Check if we're in any valid trading window
+                if session_info["session_type"] in ["OFF", "FORCED_CLOSE"]:
+                    print(f"⏳ Skipping {symbol} — {session_info['session_type']}.")
+                    print(f"   Current UTC: {session_info['current_time_utc']}")
                     continue
+                
+                # Log session information
+                print(f"📊 Session: {session_info['session_type']} | Lot Multiplier: {session_info['lot_multiplier']}x | Min Score: {session_info['min_score']}/8.0")
 
                 decision = evaluate_trade_decision(ta_signals, ai_sentiment)
                 print(f"📈 Trade Decision: {decision}")
@@ -523,19 +547,20 @@ def run_bot():
                         f.write(json.dumps(log_entry) + "\n")
                     continue
 
-                trade_counter.setdefault(symbol_key, [])
-                trade_counter[symbol_key] = [t for t in trade_counter[symbol_key] if (now - t).total_seconds() < 3600]
-
-                if len(trade_counter[symbol_key]) >= 2:
-                    print(f"❌ Skipping {symbol_key}: 2-trade-per-hour limit reached.")
+                # ✅ NEW: Hourly trade limit check
+                current_session_name = get_current_session_name()
+                
+                # Check hourly trade limits
+                if not can_trade_this_hour(symbol, current_session_name, config.HOURLY_TRADE_LIMITS):
+                    print(f"🚫 Skipping {symbol} — Rate-limited in {current_session_name} session")
                     # Log missed trade reason
                     log_entry = {
                         "timestamp": datetime.now().isoformat(),
                         "symbol": symbol,
                         "ai_decision": "BLOCKED",
                         "ai_confidence": "N/A",
-                        "ai_reasoning": "2-trade-per-hour limit reached",
-                        "ai_risk_note": "Trade frequency limit exceeded",
+                        "ai_reasoning": f"Rate-limited in {current_session_name} session",
+                        "ai_risk_note": "Hourly trade limit exceeded",
                         "technical_score": technical_score,
                         "ema_trend": ta_signals.get("ema_trend", "N/A"),
                         "final_direction": "BLOCKED",
@@ -555,9 +580,8 @@ def run_bot():
                 execution_source = "AI"
                 override_reason = ""
 
-                # Use tech_scoring as single source of truth for score threshold
-                tech_cfg = current_config.get("tech_scoring", {})
-                min_score_threshold = tech_cfg.get("min_score_for_trade", 6.0)
+                # ✅ NEW: Use session-specific score threshold
+                min_score_threshold = session_info["min_score"]
                 
                 if technical_score >= min_score_threshold and ema_trend in ["bullish", "bearish"]:
                     if ai_direction == "HOLD":
@@ -606,21 +630,22 @@ def run_bot():
                         sl = sl_tp_result["sl"]
                         tp = sl_tp_result["tp"]
                         
-                        # Use standard config-based lot sizing (no structure-aware adaptive sizing)
+                        # ✅ NEW: Use session-specific lot size calculation
+                        from lot_size_manager import get_effective_lot_size
+                        
+                        # Get base lot size from config
                         lot_sizes = {k.upper(): v for k, v in current_config.get("lot_sizes", {}).items()}
-                        lot = lot_sizes.get(symbol_key, current_config.get("default_lot_size", 0.1))
+                        base_lot = lot_sizes.get(symbol_key, current_config.get("default_lot_size", 0.1))
                         
-                        # ✅ PM Session Lot Size Reduction
-                        pm_session_start = current_config.get("pm_session_start", 17)
-                        pm_session_end = current_config.get("pm_session_end", 19)
-                        pm_lot_multiplier = current_config.get("pm_session_lot_multiplier", 1.0)
+                        # Get risk multiplier from protection system
+                        protection_result = run_protection_cycle(None)  # Get current protection status
+                        risk_multiplier = protection_result.get("lot_multiplier", 1.0) if protection_result else 1.0
                         
-                        if pm_session_start <= current_hour < pm_session_end:
-                            original_lot = lot
-                            lot = lot * pm_lot_multiplier
-                            print(f"🕔 PM Session: Reduced lot size from {original_lot} to {lot} (50% reduction)")
-                        else:
-                            print(f"📊 Using config-based lot size: {lot}")
+                        # Apply session-specific lot multiplier
+                        session_lot_multiplier = session_info["lot_multiplier"]
+                        
+                        # Calculate effective lot size with all validations
+                        lot = get_effective_lot_size(symbol, base_lot, risk_multiplier, session_lot_multiplier)
 
                         print(f"🧶 Resolved lot size for {symbol}: {lot}")
                         print(f"📊 ATR-based SL: {sl} ({sl_tp_result['sl_from']}) | TP: {tp} ({sl_tp_result['tp_from']})")
@@ -653,7 +678,13 @@ def run_bot():
 
                         if success:
                             log_trade(symbol, final_direction, lot, sl, tp, price, result="EXECUTED")
-                            trade_counter[symbol_key].append(now)
+                            
+                            # ✅ Record trade for hourly limiting
+                            try:
+                                record_trade(symbol, current_session_name)
+                                print(f"📝 Trade recorded for hourly limiting: {symbol} in {current_session_name} session")
+                            except Exception as e:
+                                print(f"⚠️ Failed to record trade for hourly limiting: {e}")
                             
                             # ✅ Mark new trade for profit protection tracking
                             try:

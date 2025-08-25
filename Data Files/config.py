@@ -42,9 +42,9 @@ CONFIG = {
         "EURUSD": 1.25,
         "GBPUSD": 0.01,
         "GER40.cash": 1.5,
-        "NVDA": 35.0,
-        "TSLA": 35.0,
-        "USDJPY": 1.25,
+        "NVDA": 40.0,
+        "TSLA": 40.0,
+        "USDJPY": 1.35,
     },
 
     # ✅ Technical Analysis Toggles
@@ -62,38 +62,46 @@ CONFIG = {
 
     # ✅ D.E.V.I Equity Cycle Management - moved to PROTECTION_CONFIG
 
-    # ✅ Session Management
+    # ✅ Session Management - OVERHAULED
     "session_hours": {
-        "Asia": (1, 7),
-        "London": (8, 12),
-        "New York Pre-Market": (13.5, 14),
-        "New York": (14, 20),
-        "Post-Market": (20, 24)
+        "Asia": (0, 3),           # 00:00-03:00 UTC (1:00-4:00 AM Irish)
+        "London": (8, 12),        # 08:00-12:00 UTC (9:00 AM-1:00 PM Irish)
+        "New York AM": (12.5, 15), # 12:30-15:00 UTC (1:30-4:00 PM Irish)
+        "PM": (17, 19),           # 17:00-19:00 UTC (6:00-8:00 PM Irish)
     },
     
-    # ✅ Off-Hours Trading Restrictions
-    "restrict_off_hours_trading": True,
-    "min_score_off_hours": 7.0,
-    "max_lot_size_off_hours": 0.5,
-
-    # ✅ Risk Management - SIMPLIFIED (most moved to PROTECTION_CONFIG)
-    # Legacy risk parameters (may be unused):
-    "max_consecutive_losses": 3,               # Consider removing if unused
-    "cooldown_after_losses_minutes": 60,       # Consider removing if unused
+    # ✅ Session Configuration
+    "sessions": {
+        "ny_am": {
+            "start_utc": "12:30",  # 1:30 PM Irish
+            "end_utc": "15:00",    # 4:00 PM Irish
+            "lot_multiplier": 1.0, # 100% lot size
+            "min_score": 6.0,      # Minimum technical score
+            "auto_close_utc": "15:00" # Force close at 4:00 PM Irish
+        },
+        "pm": {
+            "start_utc": "17:00",  # 6:00 PM Irish
+            "end_utc": "19:00",    # 8:00 PM Irish
+            "lot_multiplier": 0.75, # 75% lot size
+            "min_score": 7.0,      # Minimum technical score
+            "auto_close_utc": "19:00" # Force close at 8:00 PM Irish
+        },
+        "asian": {
+            "start_utc": "00:00",  # 1:00 AM Irish
+            "end_utc": "03:00",    # 4:00 AM Irish
+            "lot_multiplier": 0.5, # 50% lot size
+            "min_score": 7.0,      # Minimum technical score
+            "auto_close_utc": "03:00" # Force close at 4:00 AM Irish
+        }
+    },
 
     # ✅ USD Trading Control
     "usd_related_keywords": ["USD", "US500", "US30", "NAS100", "NVDA", "TSLA"],
     "restrict_usd_to_am": True,
     "allowed_trading_window": {
-        "start_hour": 12.5,        # 12:30 UTC (1:30 PM Irish)
-        "end_hour": 19,            # 19:00 UTC (8:00 PM Irish) - Extended for PM session
+        "start_hour": 12.5,       # 12:30 UTC (1:30 PM Irish)
+        "end_hour": 15,            # 15:00 UTC (4:00 PM Irish) - Morning session only
     },
-    
-    # ✅ PM Session Configuration
-    "pm_session_start": 17,        # 17:00 UTC (6:00 PM Irish)
-    "pm_session_end": 19,          # 19:00 UTC (8:00 PM Irish)
-    "enable_pm_session_only": True, # Enable PM session trading
-    "pm_session_lot_multiplier": 0.5, # Use 50% of normal lot size during PM session
 
     # ✅ News Protection
     "enable_news_protection": True,
@@ -169,3 +177,19 @@ SL_TP_CONFIG = {
 
 # ✅ Feature flag for 0-8 scoring system
 USE_8PT_SCORING = False  # Use simple scoring system
+
+# ✅ Hourly Trade Limits Configuration
+HOURLY_TRADE_LIMITS = {
+    "asian": {
+        "symbols": ["AUDJPY", "AUDUSD"],
+        "max_trades_per_hour": 1
+    },
+    "ny_am": {
+        "symbols": ["NVDA", "TSLA", "USDJPY"],
+        "max_trades_per_hour": 2
+    },
+    "pm": {
+        "symbols": ["NVDA", "TSLA", "USDJPY"],
+        "max_trades_per_hour": 1
+    }
+}

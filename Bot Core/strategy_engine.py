@@ -30,7 +30,7 @@ import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'Data Files'))
 from config import CONFIG
-from session_utils import detect_session
+from session_manager import get_current_session_info
 from impulse_detector import detect_impulsive_move
 from rsi_fib_confluence import fib_confluence, rsi_support
 
@@ -305,7 +305,7 @@ def analyze_structure(candles_df, candles_df_h1=None, timeframe=mt5.TIMEFRAME_M1
         "engulfing": engulfing_present,
         "ema_trend": trend,
         "h1_trend": h1_trend,
-        "session": detect_session(),
+        "session": get_current_session_info()["session_type"],
         "impulse_move": impulse,
         "confluence_context": confluence_context,  # ✅ For AI only
         

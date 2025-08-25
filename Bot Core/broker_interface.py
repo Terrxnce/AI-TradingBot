@@ -55,14 +55,7 @@ def get_account_info_safe():
 
 # === Trade Execution with optional SL/TP ===
 def place_trade(symbol, action, lot=0.1, sl=None, tp=None, tech_score=None, ema_trend=None, ai_confidence=None, ai_reasoning=None, risk_note=None):
-    # Check for post-session lot sizing
-    from session_utils import is_post_session
-    from post_session_manager import get_post_session_lot_size_for_symbol
-    
-    if is_post_session():
-        original_lot = lot
-        lot = get_post_session_lot_size_for_symbol(symbol, lot)
-        print(f"🕐 Post-Session: Lot size adjusted from {original_lot} to {lot} (0.75x)")
+    # Post-session lot sizing removed - using unified lot size manager instead
     if not mt5.terminal_info():
         print("❌ MT5 terminal not Connected - Cannot place trade.")
         return False

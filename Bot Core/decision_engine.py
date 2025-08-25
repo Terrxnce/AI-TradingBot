@@ -231,11 +231,8 @@ def evaluate_trade_decision_8pt(ta_signals, ai_response_raw):
     ai_min_confidence = tech_cfg.get("ai_min_confidence", 7.0)
     ai_override_enabled = tech_cfg.get("ai_override_enabled", True)
     
-    # Check if we're in post-session mode
-    from session_utils import is_post_session
-    from post_session_manager import is_post_session_trade_eligible
-    
-    is_post_session_mode = is_post_session()
+    # Post-session mode removed - using new session system
+    is_post_session_mode = False
     
     # Determine direction from EMA trend
     ema_trend = ta_signals.get("ema_trend", "neutral")
@@ -317,23 +314,7 @@ def evaluate_trade_decision_8pt(ta_signals, ai_response_raw):
         print("⚠️ EMA alignment requirement not met")
         return "HOLD"
     
-    # Post-session specific eligibility check
-    if is_post_session_mode:
-        symbol = ta_signals.get("symbol", "")
-        ai_confidence = 0
-        
-        # Parse AI response to get confidence
-        parsed = parse_ai_response(ai_response_raw)
-        if parsed:
-            try:
-                ai_confidence = float(parsed.get('confidence', 0))
-            except:
-                ai_confidence = 0
-        
-        eligible, reason = is_post_session_trade_eligible(symbol, score_result.score_8pt, ai_confidence)
-        if not eligible:
-            print(f"🕐 Post-Session: {reason}")
-            return "HOLD"
+    # Post-session specific eligibility check removed - using new session system
     
     # Parse AI response
     parsed = parse_ai_response(ai_response_raw)
@@ -350,10 +331,17 @@ def evaluate_trade_decision_8pt(ta_signals, ai_response_raw):
         override_used = True
         print(f"⚡ Technical score {score_result.score_8pt} overrode AI - using {final_decision}")
     else:
-        # Require AI confirmation
-        if (ai_confidence >= ai_min_confidence and 
-            ai_direction == score_result.technical_direction and 
-            score_result.score_8pt >= min_required):
+        # ✅ NEW: Technical Override for AI Timeouts
+        ai_timed_out = (ai_confidence == 0 and ai_direction == "HOLD")
+        
+        if ai_timed_out and score_result.score_8pt >= min_required:
+            # Technical override: Strong signals allow trade even without AI
+            final_decision = score_result.technical_direction
+            override_used = True
+            print(f"✅ AI timed out — strong technicals ({score_result.score_8pt}/{min_required}) → trade allowed")
+        elif (ai_confidence >= ai_min_confidence and 
+              ai_direction == score_result.technical_direction and 
+              score_result.score_8pt >= min_required):
             final_decision = ai_direction
             print(f"🤝 AI confirmed technical direction: {final_decision}")
         else:
@@ -439,46 +427,10 @@ def evaluate_trade_decision_legacy(ta_signals, ai_response_raw):
         print(f"⚠️ Technical score {technical_score}/8 is below required {required_score}, Skipping trade.")
         return "HOLD"
     
-    # Post-session specific eligibility check
-    if is_post_session_mode:
-        symbol = ta_signals.get("symbol", "")
-        ai_confidence = 0
-        
-        # Parse AI response to get confidence
-        parsed = parse_ai_response(ai_response_raw)
-        if parsed:
-            try:
-                ai_confidence = float(parsed.get('confidence', 0))
-            except:
-                ai_confidence = 0
-        
-        eligible, reason = is_post_session_trade_eligible(symbol, technical_score, ai_confidence)
-        if not eligible:
-            print(f"🕐 Post-Session: {reason}")
-            return "HOLD"
+    # Post-session specific eligibility check removed - using new session system
 
-    # === PM Session USD/US Asset Filter ===
-    from datetime import datetime
-    now = datetime.now()
-    current_hour = now.hour
-    pm_start = CONFIG.get("pm_session_start", 17)
-    pm_end = CONFIG.get("pm_session_end", 19)  # Updated to match config
-    usd_keywords = CONFIG.get("usd_related_keywords", [])
-    min_pm_score = CONFIG.get("pm_usd_asset_min_score", 7)  # Updated to 7/8 for PM session
+    # PM Session filter removed - now handled by new session system
 
-    symbol = ta_signals.get("symbol", "").upper()
-
-    if pm_start <= current_hour < pm_end:
-        if any(keyword in symbol for keyword in usd_keywords):
-            if technical_score < min_pm_score:
-                print(f"🕔 PM Session: {symbol} blocked – score {technical_score}/8 below minimum {min_pm_score}")
-                return "HOLD"
-
-    # === Override AI if technicals are very strong
-    if technical_score >= required_score and direction:
-        print(f"⚡ Strong technicals (score: {technical_score}) override AI.")
-        return direction
-    
     # === Parse structured AI response with dynamic confidence requirements
     parsed = parse_ai_response(ai_response_raw)
     if parsed:
@@ -494,10 +446,21 @@ def evaluate_trade_decision_legacy(ta_signals, ai_response_raw):
         
         print(f"📊 Required AI confidence: {required_ai_confidence} (based on technical score {technical_score})")
         
-        if parsed['decision'] == direction and parsed['confidence'] >= required_ai_confidence:
+        # ✅ NEW: Technical Override for AI Timeouts
+        ai_confidence = parsed.get('confidence', 0)
+        ai_decision = parsed.get('decision', 'HOLD')
+        
+        # Check if AI response was empty/timed out
+        ai_timed_out = (ai_confidence == 0 and ai_decision == 'HOLD')
+        
+        if ai_timed_out and technical_score >= required_score:
+            # Technical override: Strong signals allow trade even without AI
+            print(f"✅ AI timed out — strong technicals ({technical_score}/{required_score}) → trade allowed")
+            return direction  # Use technical direction
+        elif ai_decision == direction and ai_confidence >= required_ai_confidence:
             return parsed['decision']
         else:
-            print(f"⚠️ AI confidence {parsed['confidence']} below required {required_ai_confidence} or direction mismatch")
+            print(f"⚠️ AI confidence {ai_confidence} below required {required_ai_confidence} or direction mismatch")
             return "HOLD"
     else:
         print("❌ Could not parse AI. Defaulting to HOLD.")

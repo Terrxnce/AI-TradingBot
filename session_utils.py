@@ -27,24 +27,9 @@ def detect_session():
 def is_post_session():
     """
     Check if current time is within post-session trading window
-    Post-Session: 17:00-19:00 UTC (5:00-7:00 PM UTC)
+    DEPRECATED: Post-session logic removed - use session_manager instead
     """
-    now = datetime.utcnow()
-    current_hour = now.hour
-    current_minute = now.minute
-    
-    # Post-session window: 17:00-19:00 UTC
-    post_session_start = 17  # 5:00 PM UTC
-    post_session_end = 19    # 7:00 PM UTC
-    
-    # Check if within post-session window
-    if post_session_start <= current_hour < post_session_end:
-        return True
-    
-    # Check for soft extension past 19:00 UTC
-    if current_hour == 19 and current_minute <= 30:
-        return True
-    
+    # Post-session logic removed - use new session system
     return False
 
 def get_post_session_time_remaining():

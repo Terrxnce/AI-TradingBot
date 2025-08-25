@@ -1,7 +1,7 @@
 {
   "overall_metrics": {
-    "total_trades": 6,
-    "executed_trades": 6,
+    "total_trades": 90,
+    "executed_trades": 90,
     "execution_rate": 1.0,
     "win_rate": 0,
     "profit_factor": 0,
@@ -10,32 +10,155 @@
     "max_drawdown": 0,
     "sharpe_ratio": 0,
     "risk_adjusted_return": 0,
-    "avg_lot_size": 1.0416666666666667,
-    "most_traded_symbol": "AUDJPY",
-    "most_active_session": "Asia"
+    "avg_lot_size": 0.5008888888888889,
+    "most_traded_symbol": "USDJPY",
+    "most_active_session": "New_York"
   },
   "daily_metrics": {
-    "2025-08-20": {
+    "2025-07-20": {
       "trades": 1,
       "profit": 10000.0,
       "wins": 1,
       "losses": 0,
       "win_rate": 1.0
     },
-    "2025-08-21": {
+    "2025-07-21": {
+      "trades": 34,
+      "profit": 120.46000000000001,
+      "wins": 25,
+      "losses": 9,
+      "win_rate": 0.7352941176470589
+    },
+    "2025-07-22": {
+      "trades": 14,
+      "profit": 112.17000000000002,
+      "wins": 11,
+      "losses": 3,
+      "win_rate": 0.7857142857142857
+    },
+    "2025-07-23": {
+      "trades": 6,
+      "profit": 119.61,
+      "wins": 3,
+      "losses": 3,
+      "win_rate": 0.5
+    },
+    "2025-07-24": {
       "trades": 5,
-      "profit": -145.07,
+      "profit": 34.53,
+      "wins": 4,
+      "losses": 1,
+      "win_rate": 0.8
+    },
+    "2025-07-25": {
+      "trades": 5,
+      "profit": -260.01,
+      "wins": 2,
+      "losses": 3,
+      "win_rate": 0.4
+    },
+    "2025-07-28": {
+      "trades": 2,
+      "profit": 121.47,
+      "wins": 2,
+      "losses": 0,
+      "win_rate": 1.0
+    },
+    "2025-07-29": {
+      "trades": 3,
+      "profit": -245.09999999999997,
+      "wins": 1,
+      "losses": 2,
+      "win_rate": 0.3333333333333333
+    },
+    "2025-07-30": {
+      "trades": 1,
+      "profit": -34.42,
       "wins": 0,
-      "losses": 5,
+      "losses": 1,
       "win_rate": 0.0
+    },
+    "2025-07-31": {
+      "trades": 1,
+      "profit": 44.03,
+      "wins": 1,
+      "losses": 0,
+      "win_rate": 1.0
+    },
+    "2025-08-01": {
+      "trades": 1,
+      "profit": -80.19,
+      "wins": 0,
+      "losses": 1,
+      "win_rate": 0.0
+    },
+    "2025-08-04": {
+      "trades": 4,
+      "profit": -118.90000000000003,
+      "wins": 2,
+      "losses": 2,
+      "win_rate": 0.5
+    },
+    "2025-08-06": {
+      "trades": 1,
+      "profit": -17.03,
+      "wins": 0,
+      "losses": 1,
+      "win_rate": 0.0
+    },
+    "2025-08-07": {
+      "trades": 3,
+      "profit": -77.12,
+      "wins": 1,
+      "losses": 2,
+      "win_rate": 0.3333333333333333
+    },
+    "2025-08-12": {
+      "trades": 4,
+      "profit": 102.12,
+      "wins": 2,
+      "losses": 2,
+      "win_rate": 0.5
+    },
+    "2025-08-15": {
+      "trades": 3,
+      "profit": -226.24,
+      "wins": 0,
+      "losses": 3,
+      "win_rate": 0.0
+    },
+    "2025-08-18": {
+      "trades": 2,
+      "profit": 18.79,
+      "wins": 2,
+      "losses": 0,
+      "win_rate": 1.0
     }
   },
   "symbol_metrics": {
-    "AUDJPY": {
-      "trades": 5,
-      "profit": -145.07,
+    "USDJPY": {
+      "trades": 86,
+      "profit": -368.18000000000006,
+      "win_rate": 0.6395348837209303,
+      "average_trade": -4.2811627906976755
+    },
+    "AUDCHF": {
+      "trades": 1,
+      "profit": -17.03,
       "win_rate": 0.0,
-      "average_trade": -29.014
+      "average_trade": -17.03
+    },
+    "EURJPY": {
+      "trades": 1,
+      "profit": -0.77,
+      "win_rate": 0.0,
+      "average_trade": -0.77
+    },
+    "XAUUSD": {
+      "trades": 1,
+      "profit": 0.15,
+      "win_rate": 1.0,
+      "average_trade": 0.15
     },
     "": {
       "trades": 1,
@@ -45,18 +168,36 @@
     }
   },
   "session_metrics": {
+    "NY_PreMarket": {
+      "trades": 1,
+      "profit": 0.14,
+      "win_rate": 1.0,
+      "average_trade": 0.14
+    },
+    "London": {
+      "trades": 1,
+      "profit": 18.65,
+      "win_rate": 1.0,
+      "average_trade": 18.65
+    },
+    "New_York": {
+      "trades": 66,
+      "profit": -214.05999999999986,
+      "win_rate": 0.6666666666666666,
+      "average_trade": -3.2433333333333314
+    },
     "Asia": {
-      "trades": 5,
-      "profit": -145.07,
-      "win_rate": 0.0,
-      "average_trade": -29.014
+      "trades": 11,
+      "profit": -88.23000000000002,
+      "win_rate": 0.6363636363636364,
+      "average_trade": -8.020909090909093
     },
     "Post_Market": {
-      "trades": 1,
-      "profit": 10000.0,
-      "win_rate": 1.0,
-      "average_trade": 10000.0
+      "trades": 11,
+      "profit": 9897.67,
+      "win_rate": 0.36363636363636365,
+      "average_trade": 899.7881818181818
     }
   },
-  "generated_at": "2025-08-21T04:04:22.026922"
+  "generated_at": "2025-08-21T16:06:31.494934"
 }
